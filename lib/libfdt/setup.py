@@ -11,6 +11,7 @@ import sys
 # Don't cross-compile - always use the host compiler.
 del os.environ['CROSS_COMPILE']
 del os.environ['CC']
+os.environ["PATH"] += ":/usr/bin"
 
 progname = sys.argv[0]
 cflags = sys.argv[1]
