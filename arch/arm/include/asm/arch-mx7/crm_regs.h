@@ -1,10 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright (C) 2015 Freescale Semiconductor, Inc.
  *
  * Author:
  *	Peng Fan <Peng.Fan@freescale.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef __ARCH_ARM_MACH_MX7_CCM_REGS_H__
@@ -58,7 +57,7 @@ struct mxc_ccm_reg {
 	uint32_t reserved_0[4092];
 	struct mxc_ccm_ccgr ccgr_array[191];	/* offset 0x4000 */
 	uint32_t reserved_1[3332];
-	struct mxc_ccm_root_slice root[121];	/* offset 0x8000 */
+	struct mxc_ccm_root_slice root[125];	/* offset 0x8000 */
 
 };
 
@@ -1999,14 +1998,6 @@ struct mxc_ccm_anatop_reg {
 #define TEMPMON_HW_ANADIG_TEMPSENSE_TRIM_TOG_T_MUX_ADDR_SHIFT 29
 #define TEMPMON_HW_ANADIG_TEMPSENSE_TRIM_TOG_T_MUX_ADDR(x) (((uint32_t)(((uint32_t)(x))<<TEMPMON_HW_ANADIG_TEMPSENSE_TRIM_TOG_T_MUX_ADDR_SHIFT))&TEMPMON_HW_ANADIG_TEMPSENSE_TRIM_TOG_T_MUX_ADDR_MASK)
 
-#define MXC_CCM_CCGR36_CAAM_DOMAIN3_OFFSET                     12
-#define MXC_CCM_CCGR36_CAAM_DOMAIN3_MASK                       (3 << MXC_CCM_CCGR36_CAAM_DOMAIN3_OFFSET)
-#define MXC_CCM_CCGR36_CAAM_DOMAIN2_OFFSET                     8
-#define MXC_CCM_CCGR36_CAAM_DOMAIN2_MASK                       (3 << MXC_CCM_CCGR36_CAAM_DOMAIN2_OFFSET)
-#define MXC_CCM_CCGR36_CAAM_DOMAIN1_OFFSET                     4
-#define MXC_CCM_CCGR36_CAAM_DOMAIN1_MASK                       (3 << MXC_CCM_CCGR36_CAAM_DOMAIN1_OFFSET)
-#define MXC_CCM_CCGR36_CAAM_DOMAIN0_OFFSET                     0
-#define MXC_CCM_CCGR36_CAAM_DOMAIN0_MASK                       (3 << MXC_CCM_CCGR36_CAAM_DOMAIN0_OFFSET)
 
 #define CCM_GPR(i)		(CCM_BASE_ADDR + CCM_GPR0_OFFSET + 0x10 * (i))
 #define CCM_OBSERVE(i)		(CCM_BASE_ADDR + CCM_OBSERVE0_OFFSET + 0x10 * (i))
@@ -2063,6 +2054,11 @@ struct mxc_ccm_anatop_reg {
 #define HW_CCM_ROOT_TARGET_TOGGLE(i, v)	writel((v), CCM_ROOT_TARGET_TOGGLE(i))
 
 #define CCM_CLK_ON_MSK	0x03
+#define CCM_CLK_ON_N_N	0x00 /* Domain clocks not needed */
+#define CCM_CLK_ON_R_W	0x02 /* Domain clocks needed when in RUN and WAIT */
+
+/* CCGR Mapping */
+#define CCGR_IDX_DDR 19 /* CCM_CCGR19 */
 
 #define CCM_ROOT_TGT_POST_DIV_SHIFT	0
 #define CCM_ROOT_TGT_PRE_DIV_SHIFT	15

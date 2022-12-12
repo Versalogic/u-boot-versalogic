@@ -19,7 +19,7 @@ LS2088A SoC overview.
       - QSGMII
       - SATA 3.0
       - XAUI
-      - XFI
+      - 10GBase-R
  - DDR Controller
      - Two ports of 72-bits (8-bits ECC) DDR4. Each port supports four
        chip-selects and two DIMM connectors. Support is up to 2133MT/s.
@@ -88,6 +88,32 @@ b) NOR boot
 c) NAND boot
 d) SD boot
 e) QSPI boot
+
+Memory map for NOR boot
+-------------------------
+Image				Flash Offset
+RCW+PBI				0x00000000
+Boot firmware (U-Boot)		0x00100000
+Boot firmware Environment	0x00300000
+PPA firmware			0x00400000
+Secure Headers			0x00600000
+DPAA2 MC			0x00A00000
+DPAA2 DPL			0x00D00000
+DPAA2 DPC			0x00E00000
+Kernel.itb			0x01000000
+
+Memory map for SD boot
+-------------------------
+Image				Flash Offset	SD Card
+						Start Block No.
+RCW+PBI				0x00000000	0x00008
+Boot firmware (U-Boot)		0x00100000	0x00800
+Boot firmware Environment	0x00300000	0x01800
+PPA firmware			0x00400000	0x02000
+DPAA2 MC			0x00A00000	0x05000
+DPAA2 DPL			0x00D00000	0x06800
+DPAA2 DPC			0x00E00000	0x07000
+Kernel.itb			0x01000000	0x08000
 
 Environment Variables
 ---------------------
@@ -187,4 +213,3 @@ DPMAC13 -> PHY4-P0
 DPMAC14 -> PHY4-P1
 DPMAC15 -> PHY4-P2
 DPMAC16 -> PHY4-P3
-

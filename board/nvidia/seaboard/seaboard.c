@@ -1,12 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  *  (C) Copyright 2010,2011
  *  NVIDIA Corporation <www.nvidia.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <asm/io.h>
+#include <asm/mach-types.h>
 #include <asm/arch/tegra.h>
 #include <asm/arch-tegra/board.h>
 #include <asm/arch/clock.h>
@@ -16,7 +16,7 @@
 #include <asm/gpio.h>
 
 /* TODO: Remove this code when the SPI switch is working */
-#if (CONFIG_MACH_TYPE != MACH_TYPE_VENTANA)
+#ifndef CONFIG_TARGET_VENTANA
 void gpio_early_init_uart(void)
 {
 	/* Enable UART via GPIO_PI3 (port 8, bit 3) so serial console works */

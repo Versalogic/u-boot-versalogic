@@ -26,6 +26,8 @@
 #define TCPC_ALERT_POWER_STATUS		BIT(1)
 #define TCPC_ALERT_CC_STATUS		BIT(0)
 
+#define TCPC_FAULT_STATUS_MASK		0x15
+
 #define TCPC_TCPC_CTRL				0x19
 #define TCPC_TCPC_CTRL_BIST_MODE	BIT(1)
 #define TCPC_TCPC_CTRL_ORIENTATION	BIT(0)
@@ -401,7 +403,10 @@ static inline unsigned int rdo_max_power(u32 rdo)
 
 #define TCPC_LOG_BUFFER_SIZE 1024
 
+struct tcpc_port;
+
 typedef void (*ss_mux_sel)(enum typec_cc_polarity pol);
+typedef int (*ext_pd_switch_setup)(struct tcpc_port *port_p);
 
 enum tcpc_port_type {
 	TYPEC_PORT_DFP,
@@ -417,6 +422,8 @@ struct tcpc_port_config {
 	uint32_t max_snk_ma;
 	uint32_t max_snk_mw;
 	uint32_t op_snk_mv;
+	bool disable_pd;
+	ext_pd_switch_setup switch_setup_func;
 };
 
 struct tcpc_port {
@@ -443,6 +450,22 @@ int tcpc_setup_dfp_mode(struct tcpc_port *port);
 int tcpc_setup_ufp_mode(struct tcpc_port *port);
 int tcpc_disable_src_vbus(struct tcpc_port *port);
 int tcpc_init(struct tcpc_port *port, struct tcpc_port_config config, ss_mux_sel ss_sel_func);
+bool tcpc_pd_sink_check_charging(struct tcpc_port *port);
 void tcpc_print_log(struct tcpc_port *port);
 
+#ifdef CONFIG_SPL_BUILD
+int tcpc_setup_ufp_mode(struct tcpc_port *port)
+{
+	return 0;
+}
+int tcpc_setup_dfp_mode(struct tcpc_port *port)
+{
+	return 0;
+}
+
+int tcpc_disable_src_vbus(struct tcpc_port *port)
+{
+	return 0;
+}
+#endif
 #endif /* __TCPCI_H */

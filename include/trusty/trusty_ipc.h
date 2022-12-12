@@ -143,11 +143,11 @@ struct trusty_ipc_chan {
  *
  * @ipc_dev:  new Trusty IPC device to be initialized
  * @tdev:     associated Trusty device
- * @buf_size: size of shared buffer to be allocated
+ * @shared_buf_size: size of shared buffer to be allocated
  */
 int trusty_ipc_dev_create(struct trusty_ipc_dev **ipc_dev,
                           struct trusty_dev *tdev,
-                          size_t buf_size);
+                          size_t shared_buf_size);
 /*
  * Shutdown @dev. Frees shared buffer, and calls trusty_dev_shutdown_ipc
  * to shutdown on the secure side.
@@ -227,10 +227,10 @@ int trusty_ipc_connect(struct trusty_ipc_chan *chan, const char *port,
  */
 int trusty_ipc_close(struct trusty_ipc_chan *chan);
 /*
- * Calls trusty_ipc_dev_get_event to poll for an event on @chan. Handles
- * event by calling appropriate callback. Returns nonnegative on success.
+ * Calls trusty_ipc_dev_get_event to poll @dev for events. Handles
+ * events by calling appropriate callbacks. Returns nonnegative on success.
  */
-int trusty_ipc_poll_for_event(struct trusty_ipc_chan *chan);
+int trusty_ipc_poll_for_event(struct trusty_ipc_dev *dev);
 /*
  * Calls trusty_ipc_dev_send to send a message. Returns a trusty_err.
  *

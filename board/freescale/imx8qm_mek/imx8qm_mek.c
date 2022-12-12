@@ -1,34 +1,27 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
- * Copyright 2017-2018 NXP
- *
- * SPDX-License-Identifier:	GPL-2.0+
+ * Copyright 2018 NXP
  */
-#include <common.h>
-#include <malloc.h>
-#include <errno.h>
-#include <netdev.h>
-#include <fsl_ifc.h>
-#include <fdt_support.h>
-#include <libfdt.h>
-#include <environment.h>
-#include <fsl_esdhc.h>
-#include <i2c.h>
 
+#include <common.h>
+#include <cpu_func.h>
+#include <env.h>
+#include <errno.h>
+#include <init.h>
+#include <asm/global_data.h>
+#include <linux/libfdt.h>
+#include <fdt_support.h>
 #include <asm/io.h>
 #include <asm/gpio.h>
 #include <asm/arch/clock.h>
-#include <asm/imx-common/sci/sci.h>
+#include <asm/arch/sci/sci.h>
 #include <asm/arch/imx8-pins.h>
-#include <dm.h>
-#include <imx8_hsio.h>
+#include <asm/arch/snvs_security_sc.h>
 #include <usb.h>
 #include <asm/arch/iomux.h>
 #include <asm/arch/sys_proto.h>
-#include <asm/imx-common/video.h>
-#include <asm/arch/video_common.h>
-#include <power-domain.h>
 #include "../common/tcpc.h"
-#include <cdns3-uboot.h>
+#include "command.h"
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -38,59 +31,68 @@ DECLARE_GLOBAL_DATA_PTR;
 #define ENET_NORMAL_PAD_CTRL	((SC_PAD_CONFIG_NORMAL << PADRING_CONFIG_SHIFT) | (SC_PAD_ISO_OFF << PADRING_LPCONFIG_SHIFT) \
 						| (SC_PAD_28FDSOI_DSE_18V_10MA << PADRING_DSE_SHIFT) | (SC_PAD_28FDSOI_PS_PU << PADRING_PULL_SHIFT))
 
-#define FSPI_PAD_CTRL	((SC_PAD_CONFIG_NORMAL << PADRING_CONFIG_SHIFT) | (SC_PAD_ISO_OFF << PADRING_LPCONFIG_SHIFT) \
-						| (SC_PAD_28FDSOI_DSE_DV_HIGH << PADRING_DSE_SHIFT) | (SC_PAD_28FDSOI_PS_PU << PADRING_PULL_SHIFT))
 
 #define GPIO_PAD_CTRL	((SC_PAD_CONFIG_NORMAL << PADRING_CONFIG_SHIFT) | (SC_PAD_ISO_OFF << PADRING_LPCONFIG_SHIFT) \
 						| (SC_PAD_28FDSOI_DSE_DV_HIGH << PADRING_DSE_SHIFT) | (SC_PAD_28FDSOI_PS_PU << PADRING_PULL_SHIFT))
 
-#define I2C_PAD_CTRL	((SC_PAD_CONFIG_OUT_IN << PADRING_CONFIG_SHIFT) | (SC_PAD_ISO_OFF << PADRING_LPCONFIG_SHIFT) \
-						| (SC_PAD_28FDSOI_DSE_DV_LOW << PADRING_DSE_SHIFT) | (SC_PAD_28FDSOI_PS_PU << PADRING_PULL_SHIFT))
 
 #define UART_PAD_CTRL	((SC_PAD_CONFIG_OUT_IN << PADRING_CONFIG_SHIFT) | (SC_PAD_ISO_OFF << PADRING_LPCONFIG_SHIFT) \
 						| (SC_PAD_28FDSOI_DSE_DV_HIGH << PADRING_DSE_SHIFT) | (SC_PAD_28FDSOI_PS_PU << PADRING_PULL_SHIFT))
 
+#ifdef CONFIG_TARGET_IMX8QM_MEK_A72_ONLY
+static iomux_cfg_t uart2_pads[] = {
+	SC_P_UART0_RTS_B | MUX_MODE_ALT(2) | MUX_PAD_CTRL(UART_PAD_CTRL),
+	SC_P_UART0_CTS_B | MUX_MODE_ALT(2) | MUX_PAD_CTRL(UART_PAD_CTRL),
+};
+#else
 static iomux_cfg_t uart0_pads[] = {
 	SC_P_UART0_RX | MUX_PAD_CTRL(UART_PAD_CTRL),
 	SC_P_UART0_TX | MUX_PAD_CTRL(UART_PAD_CTRL),
 };
+#endif
 
 static void setup_iomux_uart(void)
 {
+#ifdef CONFIG_TARGET_IMX8QM_MEK_A72_ONLY
+	imx8_iomux_setup_multiple_pads(uart2_pads, ARRAY_SIZE(uart2_pads));
+#else
 	imx8_iomux_setup_multiple_pads(uart0_pads, ARRAY_SIZE(uart0_pads));
+#endif
 }
 
 int board_early_init_f(void)
 {
-	sc_ipc_t ipcHndl = 0;
-	sc_err_t sciErr = 0;
+	sc_pm_clock_rate_t rate = SC_80MHZ;
+	int ret;
 
-	ipcHndl = gd->arch.ipc_channel_handle;
-
-	/* Power up UART0, this is very early while power domain is not working */
-	sciErr = sc_pm_set_resource_power_mode(ipcHndl, SC_R_UART_0, SC_PM_PW_MODE_ON);
-	if (sciErr != SC_ERR_NONE)
+	/* When start u-boot in XEN VM, directly return */
+	if (IS_ENABLED(CONFIG_XEN)) {
+		writel(0xF53535F5, (void __iomem *)0x80000000);
 		return 0;
+	}
 
+#ifdef CONFIG_TARGET_IMX8QM_MEK_A72_ONLY
+	/* Set UART2 clock root to 80 MHz */
+	ret = sc_pm_setup_uart(SC_R_UART_2, rate);
+	if (ret)
+		return ret;
+#else
 	/* Set UART0 clock root to 80 MHz */
-	sc_pm_clock_rate_t rate = 80000000;
-	sciErr = sc_pm_set_clock_rate(ipcHndl, SC_R_UART_0, 2, &rate);
-	if (sciErr != SC_ERR_NONE)
-		return 0;
-
-	/* Enable UART0 clock root */
-	sciErr = sc_pm_clock_enable(ipcHndl, SC_R_UART_0, 2, true, false);
-	if (sciErr != SC_ERR_NONE)
-		return 0;
+	ret = sc_pm_setup_uart(SC_R_UART_0, rate);
+	if (ret)
+		return ret;
+#endif	/* CONFIG_TARGET_IMX8QM_MEK_A72_ONLY */
 
 	setup_iomux_uart();
 
 	return 0;
 }
 
-#ifdef CONFIG_FEC_MXC
+
+#if IS_ENABLED(CONFIG_FEC_MXC)
 #include <miiphy.h>
 
+#ifndef CONFIG_DM_ETH
 static iomux_cfg_t pad_enet1[] = {
 	SC_P_ENET1_RGMII_RX_CTL | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
 	SC_P_ENET1_RGMII_RXD0 | MUX_PAD_CTRL(ENET_INPUT_PAD_CTRL),
@@ -164,6 +166,9 @@ int board_eth_init(bd_t *bis)
 
 int board_phy_config(struct phy_device *phydev)
 {
+	if (phydev->drv->config)
+		phydev->drv->config(phydev);
+
 	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x1f);
 	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x8);
 
@@ -172,17 +177,10 @@ int board_phy_config(struct phy_device *phydev)
 	phy_write(phydev, MDIO_DEVAD_NONE, 0x1d, 0x05);
 	phy_write(phydev, MDIO_DEVAD_NONE, 0x1e, 0x100);
 
-	if (phydev->drv->config)
-		phydev->drv->config(phydev);
-
 	return 0;
 }
 #endif
-
-#ifdef CONFIG_MXC_GPIO
-
-#define LVDS_ENABLE IMX_GPIO_NR(1, 6)
-#define MIPI_ENABLE IMX_GPIO_NR(1, 7)
+#endif
 
 #define BB_GPIO_3V3_1 IMX_GPIO_NR(4, 20)
 #define BB_GPIO_3V3_2 IMX_GPIO_NR(4, 24)
@@ -190,99 +188,97 @@ int board_phy_config(struct phy_device *phydev)
 
 static void board_gpio_init(void)
 {
-	/* Enable BB 3V3 */
-	gpio_request(BB_GPIO_3V3_1, "bb_3v3_1");
-	gpio_direction_output(BB_GPIO_3V3_1, 1);
-	gpio_request(BB_GPIO_3V3_2, "bb_3v3_2");
-	gpio_direction_output(BB_GPIO_3V3_2, 1);
-	gpio_request(BB_GPIO_3V3_3, "bb_3v3_3");
-	gpio_direction_output(BB_GPIO_3V3_3, 1);
+#if defined(CONFIG_TARGET_IMX8QM_MEK) || defined(CONFIG_TARGET_IMX8QM_MEK_A53_ONLY)
+	int ret;
+	struct gpio_desc desc;
+
+	ret = dm_gpio_lookup_name("GPIO4_20", &desc);
+	if (ret) {
+		printf("%s lookup GPIO@4_20 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	ret = dm_gpio_request(&desc, "bb_3v3_1");
+	if (ret) {
+		printf("%s request bb_3v3_1 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	dm_gpio_set_dir_flags(&desc, GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
+
+	ret = dm_gpio_lookup_name("GPIO4_24", &desc);
+	if (ret) {
+		printf("%s lookup GPIO@4_24 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	ret = dm_gpio_request(&desc, "bb_3v3_2");
+	if (ret) {
+		printf("%s request bb_3v3_2 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	dm_gpio_set_dir_flags(&desc, GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
+
+	ret = dm_gpio_lookup_name("GPIO4_23", &desc);
+	if (ret) {
+		printf("%s lookup GPIO@4_23 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	ret = dm_gpio_request(&desc, "bb_3v3_3");
+	if (ret) {
+		printf("%s request bb_3v3_3 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	dm_gpio_set_dir_flags(&desc, GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
 
 	/* enable LVDS SAS boards */
-	gpio_request(LVDS_ENABLE, "lvds_enable");
-	gpio_direction_output(LVDS_ENABLE, 1);
+	ret = dm_gpio_lookup_name("GPIO1_6", &desc);
+	if (ret) {
+		printf("%s lookup GPIO1_6 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	ret = dm_gpio_request(&desc, "lvds_enable");
+	if (ret) {
+		printf("%s request lvds_enable failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	dm_gpio_set_dir_flags(&desc, GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
 
 	/* enable MIPI SAS boards */
-	gpio_request(MIPI_ENABLE, "mipi_enable");
-	gpio_direction_output(MIPI_ENABLE, 1);
-}
+	ret = dm_gpio_lookup_name("GPIO1_7", &desc);
+	if (ret) {
+		printf("%s lookup GPIO1_7 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	ret = dm_gpio_request(&desc, "mipi_enable");
+	if (ret) {
+		printf("%s request mipi_enable failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	dm_gpio_set_dir_flags(&desc, GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
 #endif
 
+}
 int checkboard(void)
 {
 	puts("Board: iMX8QM MEK\n");
 
 	print_bootinfo();
 
-	/* Note:  After reloc, ipcHndl will no longer be valid.  If handle
-	 *        returned by sc_ipc_open matches SC_IPC_CH, use this
-	 *        macro (valid after reloc) for subsequent SCI calls.
-	 */
-	if (gd->arch.ipc_channel_handle != SC_IPC_CH) {
-		printf("\nSCI error! Invalid handle\n");
-	}
-
-#ifdef SCI_FORCE_ABORT
-	sc_rpc_msg_t abort_msg;
-
-	puts("Send abort request\n");
-	RPC_SIZE(&abort_msg) = 1;
-	RPC_SVC(&abort_msg) = SC_RPC_SVC_ABORT;
-	sc_ipc_write(SC_IPC_CH, &abort_msg);
-
-	/* Close IPC channel */
-	sc_ipc_close(SC_IPC_CH);
-#endif /* SCI_FORCE_ABORT */
-
 	return 0;
 }
 
-#ifdef CONFIG_FSL_HSIO
+#ifdef CONFIG_USB
 
-#define PCIE_PAD_CTRL	((SC_PAD_CONFIG_OD_IN << PADRING_CONFIG_SHIFT))
-static iomux_cfg_t board_pcie_pins[] = {
-	SC_P_PCIE_CTRL0_CLKREQ_B | MUX_MODE_ALT(0) | MUX_PAD_CTRL(PCIE_PAD_CTRL),
-	SC_P_PCIE_CTRL0_WAKE_B | MUX_MODE_ALT(0) | MUX_PAD_CTRL(PCIE_PAD_CTRL),
-	SC_P_PCIE_CTRL0_PERST_B | MUX_MODE_ALT(0) | MUX_PAD_CTRL(PCIE_PAD_CTRL),
-};
-
-static void imx8qm_hsio_initialize(void)
-{
-	struct power_domain pd;
-	int ret;
-
-	if (!power_domain_lookup_name("hsio_sata0", &pd)) {
-		ret = power_domain_on(&pd);
-		if (ret)
-			printf("hsio_sata0 Power up failed! (error = %d)\n", ret);
-	}
-
-	if (!power_domain_lookup_name("hsio_pcie0", &pd)) {
-		ret = power_domain_on(&pd);
-		if (ret)
-			printf("hsio_pcie0 Power up failed! (error = %d)\n", ret);
-	}
-
-	if (!power_domain_lookup_name("hsio_pcie1", &pd)) {
-		ret = power_domain_on(&pd);
-		if (ret)
-			printf("hsio_pcie1 Power up failed! (error = %d)\n", ret);
-	}
-
-	imx8_iomux_setup_multiple_pads(board_pcie_pins, ARRAY_SIZE(board_pcie_pins));
-}
-
-void pci_init_board(void)
-{
-	/* test the 1 lane mode of the PCIe A controller */
-	mx8qm_pcie_init();
-}
-#endif
-
-#ifdef CONFIG_USB_XHCI_IMX8
-
-#define USB_TYPEC_SEL IMX_GPIO_NR(4, 6)
-#define USB_TYPEC_EN IMX_GPIO_NR(4, 19)
+#ifdef CONFIG_USB_TCPC
+struct gpio_desc type_sel_desc;
 
 static iomux_cfg_t ss_mux_gpio[] = {
 	SC_P_USB_SS3_TC3 | MUX_MODE_ALT(3) | MUX_PAD_CTRL(GPIO_PAD_CTRL),
@@ -299,37 +295,53 @@ struct tcpc_port_config port_config = {
 void ss_mux_select(enum typec_cc_polarity pol)
 {
 	if (pol == TYPEC_POLARITY_CC1)
-		gpio_direction_output(USB_TYPEC_SEL, 0);
+		dm_gpio_set_value(&type_sel_desc, 0);
 	else
-		gpio_direction_output(USB_TYPEC_SEL, 1);
+		dm_gpio_set_value(&type_sel_desc, 1);
 }
 
 static void setup_typec(void)
 {
+	int ret;
+	struct gpio_desc typec_en_desc;
+
 	imx8_iomux_setup_multiple_pads(ss_mux_gpio, ARRAY_SIZE(ss_mux_gpio));
-	gpio_request(USB_TYPEC_SEL, "typec_sel");
-	gpio_request(USB_TYPEC_EN, "typec_en");
+	ret = dm_gpio_lookup_name("GPIO4_6", &type_sel_desc);
+	if (ret) {
+		printf("%s lookup GPIO4_6 failed ret = %d\n", __func__, ret);
+		return;
+	}
 
-	gpio_direction_output(USB_TYPEC_EN, 1);
+	ret = dm_gpio_request(&type_sel_desc, "typec_sel");
+	if (ret) {
+		printf("%s request typec_sel failed ret = %d\n", __func__, ret);
+		return;
+	}
 
-	tcpc_init(&port, port_config, &ss_mux_select);
+	dm_gpio_set_dir_flags(&type_sel_desc, GPIOD_IS_OUT);
+
+	ret = dm_gpio_lookup_name("GPIO4_19", &typec_en_desc);
+	if (ret) {
+		printf("%s lookup GPIO4_19 failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	ret = dm_gpio_request(&typec_en_desc, "typec_en");
+	if (ret) {
+		printf("%s request typec_en failed ret = %d\n", __func__, ret);
+		return;
+	}
+
+	/* Enable SS MUX */
+	dm_gpio_set_dir_flags(&typec_en_desc, GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
+
+	ret = tcpc_init(&port, port_config, &ss_mux_select);
+	if (ret) {
+		printf("%s: tcpc init failed, err=%d\n", __func__, ret);
+		return;
+	}
 }
-
-static struct cdns3_device cdns3_device_data = {
-	.none_core_base = 0x5B110000,
-	.xhci_base = 0x5B130000,
-	.dev_base = 0x5B140000,
-	.phy_base = 0x5B160000,
-	.otg_base = 0x5B120000,
-	.dr_mode = USB_DR_MODE_PERIPHERAL,
-	.index = 1,
-};
-
-int usb_gadget_handle_interrupts(void)
-{
-	cdns3_uboot_handle_interrupt(1);
-	return 0;
-}
+#endif
 
 int board_usb_init(int index, enum usb_init_type init)
 {
@@ -337,32 +349,21 @@ int board_usb_init(int index, enum usb_init_type init)
 
 	if (index == 1) {
 		if (init == USB_INIT_HOST) {
+#ifdef CONFIG_USB_TCPC
 			ret = tcpc_setup_dfp_mode(&port);
+#endif
+#ifdef CONFIG_USB_CDNS3_GADGET
 		} else {
-			struct power_domain pd;
-			int ret;
-
-			/* Power on usb */
-			if (!power_domain_lookup_name("conn_usb2", &pd)) {
-				ret = power_domain_on(&pd);
-				if (ret)
-					printf("conn_usb2 Power up failed! (error = %d)\n", ret);
-			}
-
-			if (!power_domain_lookup_name("conn_usb2_phy", &pd)) {
-				ret = power_domain_on(&pd);
-				if (ret)
-					printf("conn_usb2_phy Power up failed! (error = %d)\n", ret);
-			}
-
+#ifdef CONFIG_USB_TCPC
 			ret = tcpc_setup_ufp_mode(&port);
 			printf("%d setufp mode %d\n", index, ret);
-
-			ret = cdns3_uboot_init(&cdns3_device_data);
-			printf("%d cdns3_uboot_initmode %d\n", index, ret);
+#endif
+#endif
 		}
 	}
+
 	return ret;
+
 }
 
 int board_usb_cleanup(int index, enum usb_init_type init)
@@ -371,50 +372,35 @@ int board_usb_cleanup(int index, enum usb_init_type init)
 
 	if (index == 1) {
 		if (init == USB_INIT_HOST) {
+#ifdef CONFIG_USB_TCPC
 			ret = tcpc_disable_src_vbus(&port);
-		} else {
-			struct power_domain pd;
-			int ret;
-
-			cdns3_uboot_exit(1);
-
-			/* Power off usb */
-			if (!power_domain_lookup_name("conn_usb2", &pd)) {
-				ret = power_domain_off(&pd);
-				if (ret)
-					printf("conn_usb2 Power up failed! (error = %d)\n", ret);
-			}
-
-			if (!power_domain_lookup_name("conn_usb2_phy", &pd)) {
-				ret = power_domain_off(&pd);
-				if (ret)
-					printf("conn_usb2_phy Power up failed! (error = %d)\n", ret);
-			}
+#endif
 		}
 	}
+
 	return ret;
 }
 #endif
 
 int board_init(void)
 {
-	/* Power up base board */
-	sc_pm_set_resource_power_mode(gd->arch.ipc_channel_handle,
-		SC_R_BOARD_R1, SC_PM_PW_MODE_ON);
+	if (IS_ENABLED(CONFIG_XEN))
+		return 0;
 
-#ifdef CONFIG_MXC_GPIO
 	board_gpio_init();
-#endif
 
-#ifdef CONFIG_FSL_HSIO
-	imx8qm_hsio_initialize();
-#ifdef CONFIG_SCSI_AHCI_PLAT
-	sata_init();
-#endif
-#endif
 
-#ifdef CONFIG_USB_XHCI_IMX8
+#if defined(CONFIG_USB) && defined(CONFIG_USB_TCPC)
 	setup_typec();
+#endif
+
+#ifdef CONFIG_IMX_SNVS_SEC_SC_AUTO
+	{
+		int ret = snvs_security_sc_init();
+
+		if (ret)
+			return ret;
+	}
 #endif
 
 	return 0;
@@ -423,30 +409,35 @@ int board_init(void)
 void board_quiesce_devices(void)
 {
 	const char *power_on_devices[] = {
+#ifdef CONFIG_TARGET_IMX8QM_MEK_A72_ONLY
+		"dma_lpuart2",
+		"PD_UART2_TX",
+		"PD_UART2_RX",
+#else
 		"dma_lpuart0",
+#endif
 	};
 
-	power_off_pd_devices(power_on_devices, ARRAY_SIZE(power_on_devices));
-}
+	if (IS_ENABLED(CONFIG_XEN)) {
+		/* Clear magic number to let xen know uboot is over */
+		writel(0x0, (void __iomem *)0x80000000);
+		return;
+	}
 
-void detail_board_ddr_info(void)
-{
-	puts("\nDDR    ");
+	imx8_power_off_pd_devices(power_on_devices, ARRAY_SIZE(power_on_devices));
 }
 
 /*
  * Board specific reset that is system reset.
  */
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
-	puts("SCI reboot request");
-	sc_pm_reboot(SC_IPC_CH, SC_PM_RESET_TYPE_COLD);
-	while (1)
-		putc('.');
+	sc_pm_reboot(-1, SC_PM_RESET_TYPE_COLD);
+	while(1);
 }
 
 #ifdef CONFIG_OF_BOARD_SETUP
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	return 0;
 }
@@ -454,80 +445,100 @@ int ft_board_setup(void *blob, bd_t *bd)
 
 int board_mmc_get_env_dev(int devno)
 {
+	/* Use EMMC */
+	if (IS_ENABLED(CONFIG_XEN))
+		return 0;
+
 	return devno;
 }
 
 int mmc_map_to_kernel_blk(int dev_no)
 {
+	/* Use EMMC */
+	if (IS_ENABLED(CONFIG_XEN))
+		return 0;
+
 	return dev_no;
 }
 
 extern uint32_t _end_ofs;
 int board_late_init(void)
 {
-#ifdef CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
-	setenv("board_name", "MEK");
-	setenv("board_rev", "iMX8QM");
+	char *fdt_file;
+#if !defined(CONFIG_TARGET_IMX8QM_MEK_A53_ONLY) && !defined(CONFIG_TARGET_IMX8QM_MEK_A72_ONLY)
+	bool m4_booted;
 #endif
+
+	build_info();
+
+#ifdef CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
+	env_set("board_name", "MEK");
+	env_set("board_rev", "iMX8QM");
+#endif
+
+	env_set("sec_boot", "no");
+#ifdef CONFIG_AHAB_BOOT
+	env_set("sec_boot", "yes");
+#endif
+
+	fdt_file = env_get("fdt_file");
+
+	if (fdt_file && !strcmp(fdt_file, "undefined")) {
+#if defined(CONFIG_TARGET_IMX8QM_MEK_A53_ONLY)
+		env_set("fdt_file", "imx8qm-mek-cockpit-ca53.dtb");
+#elif defined(CONFIG_TARGET_IMX8QM_MEK_A72_ONLY)
+		env_set("fdt_file", "imx8qm-mek-cockpit-ca72.dtb");
+#else
+		m4_booted = m4_parts_booted();
+		if (m4_booted)
+			env_set("fdt_file", "imx8qm-mek-rpmsg.dtb");
+		else
+			env_set("fdt_file", "imx8qm-mek.dtb");
+#endif
+	}
 
 #ifdef CONFIG_ENV_IS_IN_MMC
 	board_late_mmc_env_init();
 #endif
 
-#ifdef IMX_LOAD_HDMI_FIMRWARE
+#if defined(CONFIG_IMX_LOAD_HDMI_FIMRWARE_RX) || defined(CONFIG_IMX_LOAD_HDMI_FIMRWARE_TX)
 	char *end_of_uboot;
 	char command[256];
 	end_of_uboot = (char *)(ulong)(CONFIG_SYS_TEXT_BASE + _end_ofs + fdt_totalsize(gd->fdt_blob));
 	end_of_uboot += 9;
 
-	memcpy(IMX_HDMI_FIRMWARE_LOAD_ADDR, end_of_uboot, IMX_HDMI_FIRMWARE_SIZE);
+	/* load hdmitxfw.bin and hdmirxfw.bin*/
+	memcpy((void *)IMX_HDMI_FIRMWARE_LOAD_ADDR, end_of_uboot,
+			IMX_HDMITX_FIRMWARE_SIZE + IMX_HDMIRX_FIRMWARE_SIZE);
 
+#ifdef CONFIG_IMX_LOAD_HDMI_FIMRWARE_TX
 	sprintf(command, "hdp load 0x%x", IMX_HDMI_FIRMWARE_LOAD_ADDR);
 	run_command(command, 0);
 #endif
+#ifdef CONFIG_IMX_LOAD_HDMI_FIMRWARE_RX
+	sprintf(command, "hdprx load 0x%x",
+			IMX_HDMI_FIRMWARE_LOAD_ADDR + IMX_HDMITX_FIRMWARE_SIZE);
+	run_command(command, 0);
+#endif
+#endif /* CONFIG_IMX_LOAD_HDMI_FIMRWARE_RX || CONFIG_IMX_LOAD_HDMI_FIMRWARE_TX */
 
 	return 0;
 }
+
+#ifdef CONFIG_ANDROID_SUPPORT
+bool is_power_key_pressed(void) {
+	sc_bool_t status = SC_FALSE;
+
+	sc_misc_get_button_status(-1, &status);
+	return (bool)status;
+}
+#endif
 
 #ifdef CONFIG_FSL_FASTBOOT
 #ifdef CONFIG_ANDROID_RECOVERY
 int is_recovery_key_pressing(void)
 {
-	return 0; /*TODO*/
+	return 0; /* TODO */
 }
-#endif /*CONFIG_ANDROID_RECOVERY*/
-#endif /*CONFIG_FSL_FASTBOOT*/
-
-#if defined(CONFIG_VIDEO_IMXDPUV1)
-static void enable_lvds(struct display_info_t const *dev)
-{
-	display_controller_setup((PS2KHZ(dev->mode.pixclock) * 1000));
-	lvds_soc_setup(dev->bus, (PS2KHZ(dev->mode.pixclock) * 1000));
-	lvds_configure(dev->bus);
-	lvds2hdmi_setup(6);
-}
-
-struct display_info_t const displays[] = {{
-	.bus	= 0, /* LVDS0 */
-	.addr	= 0, /* Unused */
-	.pixfmt	= IMXDPUV1_PIX_FMT_BGRA32,
-	.detect	= NULL,
-	.enable	= enable_lvds,
-	.mode	= {
-		.name           = "IT6263", /* 720P60 */
-		.refresh        = 60,
-		.xres           = 1280,
-		.yres           = 720,
-		.pixclock       = 13468, /* 74250000 */
-		.left_margin    = 110,
-		.right_margin   = 220,
-		.upper_margin   = 5,
-		.lower_margin   = 20,
-		.hsync_len      = 40,
-		.vsync_len      = 5,
-		.sync           = FB_SYNC_EXT,
-		.vmode          = FB_VMODE_NONINTERLACED
-} } };
-size_t display_count = ARRAY_SIZE(displays);
-
-#endif /* CONFIG_VIDEO_IMXDPUV1 */
+#endif /* CONFIG_ANDROID_RECOVERY */
+#endif /* CONFIG_FSL_FASTBOOT */

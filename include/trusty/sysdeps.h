@@ -29,10 +29,10 @@
  * types available in a normal C runtime. At least things like uint64_t,
  * uintptr_t, and bool (with |false|, |true| keywords) must be present.
  */
+#include <common.h>
 #include <compiler.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <linux/types.h>
+#include <irq_func.h>
+
 /*
  * These attribute macros may need to be adjusted if not using gcc or clang.
  */
@@ -75,10 +75,10 @@ void trusty_idle(struct trusty_dev *dev);
  */
 void trusty_abort(void) TRUSTY_ATTR_NO_RETURN;
 /*
- * Print a formatted string. @format must point to a NULL-terminated UTF-8
- * string, and is followed by arguments to be printed.
+ * Print a formatted string. @format must point to a NULL-terminated string, and
+ * is followed by arguments to be printed.
  */
-void trusty_printv(const char *format, ...);
+void trusty_printf(const char *format, ...);
 /*
  * Copy @n bytes from @src to @dest.
  */
@@ -108,16 +108,14 @@ void *trusty_calloc(size_t n, size_t size) TRUSTY_ATTR_WARN_UNUSED_RESULT;
  */
 void trusty_free(void *addr);
 /*
- * Allocate @size bytes of page aligned memory to be shared with secure side.
+ * Allocate @count contiguous pages to be shared with secure side.
  *
- * @mem_inf:  Stores cache attributes
  * Returns:   vaddr of allocated memory
  */
-void *trusty_membuf_alloc(struct ns_mem_page_info *mem_inf,
-                          size_t size) TRUSTY_ATTR_WARN_UNUSED_RESULT;
+void *trusty_alloc_pages(unsigned count) TRUSTY_ATTR_WARN_UNUSED_RESULT;
 /*
- * Frees memory at @vaddr allocated by trusty_membuf_alloc
+ * Free @count pages at @vaddr allocated by trusty_alloc_pages
  */
-void trusty_membuf_free(void *vaddr);
+void trusty_free_pages(void *vaddr, unsigned count);
 
 #endif /* TRUSTY_SYSDEPS_H_ */

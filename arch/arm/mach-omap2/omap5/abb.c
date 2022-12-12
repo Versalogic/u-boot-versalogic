@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Adaptive Body Bias programming sequence for OMAP5 family
  *
@@ -5,13 +6,12 @@
  * Texas Instruments, <www.ti.com>
  *
  * Andrii Tseglytskyi <andrii.tseglytskyi@ti.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <asm/omap_common.h>
 #include <asm/io.h>
+#include <linux/bitops.h>
 
 /*
  * Setup LDOVBB for OMAP5.
@@ -28,8 +28,8 @@
 s8 abb_setup_ldovbb(u32 fuse, u32 ldovbb)
 {
 	u32 vset;
-	u32 fuse_enable_mask = OMAP5_ABB_FUSE_ENABLE_MASK;
-	u32 fuse_vset_mask = OMAP5_ABB_FUSE_VSET_MASK;
+	u32 fuse_enable_mask = OMAP5_PROD_ABB_FUSE_ENABLE_MASK;
+	u32 fuse_vset_mask = OMAP5_PROD_ABB_FUSE_VSET_MASK;
 
 	if (!is_omap54xx()) {
 		/* DRA7 */

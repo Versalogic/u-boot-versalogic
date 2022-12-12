@@ -1,8 +1,8 @@
+// SPDX-License-Identifier:	GPL-2.0+
 /*
  * Copyright (C) 2010-2016 Freescale Semiconductor, Inc. All Rights Reserved.
  * Copyright 2017 NXP
  *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 #include <common.h>
 #include <malloc.h>
@@ -10,7 +10,7 @@
 #ifdef CONFIG_MXC_KPD
 #include <mxc_keyb.h>
 #endif
-#include <asm/imx-common/boot_mode.h>
+#include <asm/mach-imx/boot_mode.h>
 
 #ifdef CONFIG_MXC_KPD
 #define PRESSED_VOL_DOWN	0x01

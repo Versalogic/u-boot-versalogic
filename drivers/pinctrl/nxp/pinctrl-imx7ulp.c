@@ -1,12 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2016 Freescale Semiconductor, Inc.
  *
  * Peng Fan <peng.fan@nxp.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
-#include <dm/device.h>
+#include <common.h>
+#include <dm.h>
 #include <dm/pinctrl.h>
 
 #include "pinctrl-imx.h"
@@ -39,7 +39,7 @@ U_BOOT_DRIVER(imx7ulp_pinctrl) = {
 	.of_match = of_match_ptr(imx7ulp_pinctrl_match),
 	.probe = imx7ulp_pinctrl_probe,
 	.remove = imx_pinctrl_remove,
-	.priv_auto_alloc_size = sizeof(struct imx_pinctrl_priv),
+	.priv_auto	= sizeof(struct imx_pinctrl_priv),
 	.ops = &imx_pinctrl_ops,
 	.flags = DM_FLAG_PRE_RELOC,
 };

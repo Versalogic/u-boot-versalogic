@@ -1,13 +1,11 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright (C) 2016 Freescale Semiconductor, Inc.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef _ASM_ARCH_PCC_H
 #define _ASM_ARCH_PCC_H
 
-#include <common.h>
 #include <asm/arch/scg.h>
 
 /* PCC2 */

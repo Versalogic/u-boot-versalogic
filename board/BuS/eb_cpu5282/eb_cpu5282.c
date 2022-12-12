@@ -1,17 +1,19 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * (C) Copyright 2005-2009
  * BuS Elektronik GmbH & Co.KG <esw@bus-elektonik.de>
  *
  * (C) Copyright 2000-2003
  * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <command.h>
+#include <asm/global_data.h>
 #include "asm/m5282.h"
 #include <bmp_layout.h>
+#include <env.h>
+#include <init.h>
 #include <status_led.h>
 #include <bus_vcxk.h>
 
@@ -19,9 +21,9 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#ifdef CONFIG_VIDEO
-unsigned long display_width;
-unsigned long display_height;
+#if IS_ENABLED(CONFIG_VIDEO_VCXK)
+extern unsigned long display_width;
+extern unsigned long display_height;
 #endif
 
 /*---------------------------------------------------------------------------*/
@@ -35,7 +37,7 @@ int checkboard (void)
 	return 0;
 }
 
-phys_size_t initdram (int board_type)
+int dram_init(void)
 {
 	int size, i;
 
@@ -92,11 +94,13 @@ phys_size_t initdram (int board_type)
 	*(unsigned int *) (CONFIG_SYS_SDRAM_BASE1 + 0x220) = 0xA5A5;
 	size += CONFIG_SYS_SDRAM_SIZE1 * 1024 * 1024;
 #endif
-	return size;
+	gd->ram_size = size;
+
+	return 0;
 }
 
 #if defined(CONFIG_SYS_DRAM_TEST)
-int testdram (void)
+int testdram(void)
 {
 	uint *pstart = (uint *) CONFIG_SYS_MEMTEST_START;
 	uint *pend = (uint *) CONFIG_SYS_MEMTEST_END;
@@ -137,7 +141,7 @@ void hw_watchdog_init(void)
 	int enable;
 
 	enable = 1;
-	s = getenv("watchdog");
+	s = env_get("watchdog");
 	if (s != NULL)
 		if ((strncmp(s, "off", 3) == 0) || (strncmp(s, "0", 1) == 0))
 			enable = 0;
@@ -180,8 +184,7 @@ void __led_set(led_id_t mask, int state)
 		MCFGPTA_GPTPORT &= ~(1 << 3);
 }
 
-#if defined(CONFIG_VIDEO)
-
+#if IS_ENABLED(CONFIG_VIDEO_VCXK)
 int drv_video_init(void)
 {
 	char *s;
@@ -189,15 +192,15 @@ int drv_video_init(void)
 	unsigned long splash;
 #endif
 	printf("Init Video as ");
-	s = getenv("displaywidth");
+	s = env_get("displaywidth");
 	if (s != NULL)
-		display_width = simple_strtoul(s, NULL, 10);
+		display_width = dectoul(s, NULL);
 	else
 		display_width = 256;
 
-	s = getenv("displayheight");
+	s = env_get("displayheight");
 	if (s != NULL)
-		display_height = simple_strtoul(s, NULL, 10);
+		display_height = dectoul(s, NULL);
 	else
 		display_height = 256;
 
@@ -209,9 +212,9 @@ int drv_video_init(void)
 	vcxk_init(display_width, display_height);
 
 #ifdef CONFIG_SPLASH_SCREEN
-	s = getenv("splashimage");
+	s = env_get("splashimage");
 	if (s != NULL) {
-		splash = simple_strtoul(s, NULL, 16);
+		splash = hextoul(s, NULL);
 		vcxk_acknowledge_wait();
 		video_display_bitmap(splash, 0, 0);
 	}
@@ -222,8 +225,8 @@ int drv_video_init(void)
 
 /*---------------------------------------------------------------------------*/
 
-#ifdef CONFIG_VIDEO
-int do_brightness(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+#if IS_ENABLED(CONFIG_VIDEO_VCXK)
+int do_brightness(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 {
 	int rcode = 0;
 	ulong side;
@@ -231,8 +234,8 @@ int do_brightness(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 	switch (argc) {
 	case 3:
-		side = simple_strtoul(argv[1], NULL, 10);
-		bright = simple_strtoul(argv[2], NULL, 10);
+		side = dectoul(argv[1], NULL);
+		bright = dectoul(argv[2], NULL);
 		if ((side >= 0) && (side <= 3) &&
 			(bright >= 0) && (bright <= 1000)) {
 			vcxk_setbrightness(side, bright);

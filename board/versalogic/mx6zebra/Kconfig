@@ -1,4 +1,4 @@
-if TARGET_MX6ZEBRA
+if TARGET_MX6ZEBRA || TARGET_MX6ZEBRA_COMMON
 
 config SYS_BOARD
 	default "mx6zebra"
@@ -8,5 +8,8 @@ config SYS_VENDOR
 
 config SYS_CONFIG_NAME
 	default "mx6zebra"
+
+config SYS_TEXT_BASE
+    default 0x17800000
 
 endif

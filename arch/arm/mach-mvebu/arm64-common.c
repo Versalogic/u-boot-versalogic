@@ -1,13 +1,18 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2016 Stefan Roese <sr@denx.de>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <dm.h>
 #include <fdtdec.h>
-#include <libfdt.h>
+#include <init.h>
+#include <asm/cache.h>
+#include <asm/global_data.h>
+#include <asm/ptrace.h>
+#include <linux/libfdt.h>
+#include <linux/sizes.h>
+#include <pci.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/arch/cpu.h>
@@ -43,77 +48,31 @@ const struct mbus_dram_target_info *mvebu_mbus_dram_info(void)
 	return NULL;
 }
 
-/* DRAM init code ... */
-
-static const void *get_memory_reg_prop(const void *fdt, int *lenp)
+__weak int dram_init_banksize(void)
 {
-	int offset;
-
-	offset = fdt_path_offset(fdt, "/memory");
-	if (offset < 0)
-		return NULL;
-
-	return fdt_getprop(fdt, offset, "reg", lenp);
+	if (CONFIG_IS_ENABLED(ARMADA_8K))
+		return a8k_dram_init_banksize();
+	else if (CONFIG_IS_ENABLED(ARMADA_3700))
+		return a3700_dram_init_banksize();
+	else
+		return fdtdec_setup_memory_banksize();
 }
 
-int dram_init(void)
+__weak int dram_init(void)
 {
-	const void *fdt = gd->fdt_blob;
-	const fdt32_t *val;
-	int ac, sc, len;
-
-	ac = fdt_address_cells(fdt, 0);
-	sc = fdt_size_cells(fdt, 0);
-	if (ac < 0 || sc < 1 || sc > 2) {
-		printf("invalid address/size cells\n");
-		return -EINVAL;
+	if (CONFIG_IS_ENABLED(ARMADA_8K)) {
+		gd->ram_size = a8k_dram_scan_ap_sz();
+		if (gd->ram_size != 0)
+			return 0;
 	}
 
-	val = get_memory_reg_prop(fdt, &len);
-	if (len / sizeof(*val) < ac + sc)
+	if (CONFIG_IS_ENABLED(ARMADA_3700))
+		return a3700_dram_init();
+
+	if (fdtdec_setup_mem_size_base() != 0)
 		return -EINVAL;
-
-	val += ac;
-
-	gd->ram_size = fdtdec_get_number(val, sc);
-
-	debug("DRAM size = %08lx\n", (unsigned long)gd->ram_size);
 
 	return 0;
-}
-
-void dram_init_banksize(void)
-{
-	const void *fdt = gd->fdt_blob;
-	const fdt32_t *val;
-	int ac, sc, cells, len, i;
-
-	val = get_memory_reg_prop(fdt, &len);
-	if (len < 0)
-		return;
-
-	ac = fdt_address_cells(fdt, 0);
-	sc = fdt_size_cells(fdt, 0);
-	if (ac < 1 || sc > 2 || sc < 1 || sc > 2) {
-		printf("invalid address/size cells\n");
-		return;
-	}
-
-	cells = ac + sc;
-
-	len /= sizeof(*val);
-
-	for (i = 0; i < CONFIG_NR_DRAM_BANKS && len >= cells;
-	     i++, len -= cells) {
-		gd->bd->bi_dram[i].start = fdtdec_get_number(val, ac);
-		val += ac;
-		gd->bd->bi_dram[i].size = fdtdec_get_number(val, sc);
-		val += sc;
-
-		debug("DRAM bank %d: start = %08lx, size = %08lx\n",
-		      i, (unsigned long)gd->bd->bi_dram[i].start,
-		      (unsigned long)gd->bd->bi_dram[i].size);
-	}
 }
 
 int arch_cpu_init(void)
@@ -144,6 +103,10 @@ int arch_early_init_r(void)
 
 	/* Cause the SATA device to do its early init */
 	uclass_first_device(UCLASS_AHCI, &dev);
+
+	/* Trigger PCIe devices detection */
+	if (IS_ENABLED(CONFIG_PCI))
+		pci_init();
 
 	return 0;
 }

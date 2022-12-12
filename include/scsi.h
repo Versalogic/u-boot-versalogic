@@ -1,13 +1,21 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * (C) Copyright 2001
  * Denis Peter, MPL AG Switzerland
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
  #ifndef _SCSI_H
  #define _SCSI_H
 
-typedef struct SCSI_cmd_block{
+#include <asm/cache.h>
+#include <linux/dma-direction.h>
+
+/* Fix this to the maximum */
+#define SCSI_MAX_DEVICE \
+	(CONFIG_SYS_SCSI_MAX_SCSI_ID * CONFIG_SYS_SCSI_MAX_LUN)
+
+struct udevice;
+
+struct scsi_cmd {
 	unsigned char		cmd[16];					/* command				   */
 	/* for request sense */
 	unsigned char		sense_buf[64]
@@ -27,7 +35,8 @@ typedef struct SCSI_cmd_block{
 	unsigned long		trans_bytes;			/* tranfered bytes		*/
 
 	unsigned int		priv;
-}ccb;
+	enum dma_data_direction	dma_dir;
+};
 
 /*-----------------------------------------------------------
 **
@@ -158,39 +167,80 @@ typedef struct SCSI_cmd_block{
 #define SCSI_WRITE_LONG	0x3F		/* Write Long (O) */
 #define SCSI_WRITE_SAME	0x41		/* Write Same (O) */
 
-
-/****************************************************************************
- * decleration of functions which have to reside in the LowLevel Part Driver
- */
-
-void scsi_print_error(ccb *pccb);
-int scsi_exec(ccb *pccb);
-void scsi_bus_reset(void);
-#if !defined(CONFIG_DM_SCSI)
-void scsi_low_level_init(int busdevfunc);
-#else
-void scsi_low_level_init(int busdevfunc, struct udevice *dev);
-#endif
-
-/***************************************************************************
- * functions residing inside cmd_scsi.c
- */
-void scsi_init(void);
-int scsi_scan(int mode);
-
-#if defined(CONFIG_DM_SCSI)
 /**
- * struct scsi_platdata - stores information about SCSI controller
+ * struct scsi_plat - stores information about SCSI controller
  *
  * @base: Controller base address
  * @max_lun: Maximum number of logical units
  * @max_id: Maximum number of target ids
+ * @max_bytes_per_req: Maximum number of bytes per read/write request
  */
-struct scsi_platdata {
+struct scsi_plat {
 	unsigned long base;
 	unsigned long max_lun;
 	unsigned long max_id;
+	unsigned long max_bytes_per_req;
 };
+
+/* Operations for SCSI */
+struct scsi_ops {
+	/**
+	 * exec() - execute a command
+	 *
+	 * @dev:	SCSI bus
+	 * @cmd:	Command to execute
+	 * @return 0 if OK, -ve on error
+	 */
+	int (*exec)(struct udevice *dev, struct scsi_cmd *cmd);
+
+	/**
+	 * bus_reset() - reset the bus
+	 *
+	 * @dev:	SCSI bus to reset
+	 * @return 0 if OK, -ve on error
+	 */
+	int (*bus_reset)(struct udevice *dev);
+};
+
+#define scsi_get_ops(dev)        ((struct scsi_ops *)(dev)->driver->ops)
+
+extern struct scsi_ops scsi_ops;
+
+/**
+ * scsi_exec() - execute a command
+ *
+ * @dev:	SCSI bus
+ * @cmd:	Command to execute
+ * Return: 0 if OK, -ve on error
+ */
+int scsi_exec(struct udevice *dev, struct scsi_cmd *cmd);
+
+/**
+ * scsi_bus_reset() - reset the bus
+ *
+ * @dev:	SCSI bus to reset
+ * Return: 0 if OK, -ve on error
+ */
+int scsi_bus_reset(struct udevice *dev);
+
+/**
+ * scsi_scan() - Scan all SCSI controllers for available devices
+ *
+ * @vebose: true to show information about each device found
+ */
+int scsi_scan(bool verbose);
+
+/**
+ * scsi_scan_dev() - scan a SCSI bus and create devices
+ *
+ * @dev:	SCSI bus
+ * @verbose:	true to show information about each device found
+ */
+int scsi_scan_dev(struct udevice *dev, bool verbose);
+
+#ifndef CONFIG_DM_SCSI
+void scsi_low_level_init(int busdevfunc);
+void scsi_init(void);
 #endif
 
 #define SCSI_IDENTIFY					0xC0  /* not used */

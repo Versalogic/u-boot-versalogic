@@ -1,17 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * (C) Copyright 2015 Google, Inc
  * Written by Simon Glass <sjg@chromium.org>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <dm.h>
+#include <log.h>
 #include <os.h>
 #include <scsi.h>
 #include <usb.h>
-
-DECLARE_GLOBAL_DATA_PTR;
 
 /*
  * This driver emulates a flash stick using the UFI command specification and
@@ -244,7 +242,7 @@ static int handle_ufi_command(struct sandbox_flash_plat *plat,
 			      struct sandbox_flash_priv *priv, const void *buff,
 			      int len)
 {
-	const struct SCSI_cmd_block *req = buff;
+	const struct scsi_cmd *req = buff;
 
 	switch (*req->cmd) {
 	case SCSI_INQUIRY: {
@@ -299,7 +297,7 @@ static int handle_ufi_command(struct sandbox_flash_plat *plat,
 static int sandbox_flash_bulk(struct udevice *dev, struct usb_device *udev,
 			      unsigned long pipe, void *buff, int len)
 {
-	struct sandbox_flash_plat *plat = dev_get_platdata(dev);
+	struct sandbox_flash_plat *plat = dev_get_plat(dev);
 	struct sandbox_flash_priv *priv = dev_get_priv(dev);
 	int ep = usb_pipeendpoint(pipe);
 	struct umass_bbb_cbw *cbw = buff;
@@ -368,20 +366,18 @@ err:
 	return 0;
 }
 
-static int sandbox_flash_ofdata_to_platdata(struct udevice *dev)
+static int sandbox_flash_of_to_plat(struct udevice *dev)
 {
-	struct sandbox_flash_plat *plat = dev_get_platdata(dev);
-	const void *blob = gd->fdt_blob;
+	struct sandbox_flash_plat *plat = dev_get_plat(dev);
 
-	plat->pathname = fdt_getprop(blob, dev_of_offset(dev),
-				     "sandbox,filepath", NULL);
+	plat->pathname = dev_read_string(dev, "sandbox,filepath");
 
 	return 0;
 }
 
 static int sandbox_flash_bind(struct udevice *dev)
 {
-	struct sandbox_flash_plat *plat = dev_get_platdata(dev);
+	struct sandbox_flash_plat *plat = dev_get_plat(dev);
 	struct usb_string *fs;
 
 	fs = plat->flash_strings;
@@ -392,13 +388,12 @@ static int sandbox_flash_bind(struct udevice *dev)
 	fs[2].id = STRINGID_SERIAL;
 	fs[2].s = dev->name;
 
-	return usb_emul_setup_device(dev, PACKET_SIZE_64, plat->flash_strings,
-				     flash_desc_list);
+	return usb_emul_setup_device(dev, plat->flash_strings, flash_desc_list);
 }
 
 static int sandbox_flash_probe(struct udevice *dev)
 {
-	struct sandbox_flash_plat *plat = dev_get_platdata(dev);
+	struct sandbox_flash_plat *plat = dev_get_plat(dev);
 	struct sandbox_flash_priv *priv = dev_get_priv(dev);
 
 	priv->fd = os_open(plat->pathname, OS_O_RDONLY);
@@ -424,8 +419,8 @@ U_BOOT_DRIVER(usb_sandbox_flash) = {
 	.of_match = sandbox_usb_flash_ids,
 	.bind	= sandbox_flash_bind,
 	.probe	= sandbox_flash_probe,
-	.ofdata_to_platdata = sandbox_flash_ofdata_to_platdata,
+	.of_to_plat = sandbox_flash_of_to_plat,
 	.ops	= &sandbox_usb_flash_ops,
-	.priv_auto_alloc_size = sizeof(struct sandbox_flash_priv),
-	.platdata_auto_alloc_size = sizeof(struct sandbox_flash_plat),
+	.priv_auto	= sizeof(struct sandbox_flash_priv),
+	.plat_auto	= sizeof(struct sandbox_flash_plat),
 };

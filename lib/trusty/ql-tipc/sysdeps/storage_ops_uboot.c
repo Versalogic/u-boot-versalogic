@@ -49,17 +49,26 @@ int rpmb_storage_send(void *rpmb_dev, const void *rel_write_data,
     ALLOC_CACHE_ALIGN_BUFFER(uint8_t, rpmb_read_data, read_size);
     int ret = TRUSTY_ERR_NONE;
     struct mmc *mmc = find_mmc_device(mmc_get_env_dev());
-    char original_part = mmc->block_dev.hwpart;
+    if (!mmc) {
+	trusty_error("failed to get mmc device.\n");
+	return -1;
+    }
+    struct blk_desc *desc = mmc_get_blk_desc(mmc);
+    if (!desc) {
+	trusty_error("failed to get mmc desc.\n");
+	return -1;
+    }
+    char original_part = desc->hwpart;
 
     /* Switch to RPMB partition */
-    if (mmc->block_dev.hwpart != MMC_PART_RPMB) {
+    if (desc->hwpart != MMC_PART_RPMB) {
         ret = mmc_switch_part(mmc, MMC_PART_RPMB);
         if (ret) {
             trusty_error("failed to switch to RPMB partition\n");
             ret = TRUSTY_ERR_GENERIC;
             goto end;
         }
-        mmc->block_dev.hwpart = MMC_PART_RPMB;
+        desc->hwpart = MMC_PART_RPMB;
     }
 
     if (rel_write_size) {
@@ -111,12 +120,12 @@ int rpmb_storage_send(void *rpmb_dev, const void *rel_write_data,
 
 end:
     /* Return to original partition */
-    if (mmc->block_dev.hwpart != original_part) {
+    if (desc->hwpart != original_part) {
         if (mmc_switch_part(mmc, original_part) != 0) {
             trusty_error("failed to switch back to original partition\n");
             return TRUSTY_ERR_GENERIC;
         }
-        mmc->block_dev.hwpart = original_part;
+       desc->hwpart = original_part;
     }
     return ret;
 }

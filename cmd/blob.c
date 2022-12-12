@@ -1,22 +1,19 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  *
  * Command for encapsulating/decapsulating blob of memory.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
 #include <command.h>
-#include <environment.h>
 #include <malloc.h>
 #include <asm/byteorder.h>
 #include <linux/compiler.h>
-#if defined(CONFIG_ARCH_MX6) || defined(CONFIG_ARCH_MX7)
+#if defined(CONFIG_ARCH_MX6) || defined(CONFIG_ARCH_MX7) || \
+	defined(CONFIG_ARCH_MX7ULP) || defined(CONFIG_ARCH_IMX8M)
 #include <fsl_sec.h>
 #include <asm/arch/clock.h>
 #endif
-
-DECLARE_GLOBAL_DATA_PTR;
 
 /**
  * blob_decap() - Decapsulate the data as a blob
@@ -24,10 +21,12 @@ DECLARE_GLOBAL_DATA_PTR;
  * @src:	- Address of data to be decapsulated
  * @dst:	- Address of data to be decapsulated
  * @len:	- Size of data to be decapsulated
+ * @keycolor    - Determines if the source data is covered (black key) or
+ *                plaintext.
  *
  * Returns zero on success,and negative on error.
  */
-__weak int blob_decap(u8 *key_mod, u8 *src, u8 *dst, u32 len)
+__weak int blob_decap(u8 *key_mod, u8 *src, u8 *dst, u32 len, u8 keycolor)
 {
 	return 0;
 }
@@ -38,10 +37,12 @@ __weak int blob_decap(u8 *key_mod, u8 *src, u8 *dst, u32 len)
  * @src:	- Address of data to be encapsulated
  * @dst:	- Address of data to be encapsulated
  * @len:	- Size of data to be encapsulated
+ * @keycolor    - Determines if the source data is covered (black key) or
+ *                plaintext.
  *
  * Returns zero on success,and negative on error.
  */
-__weak int blob_encap(u8 *key_mod, u8 *src, u8 *dst, u32 len)
+__weak int blob_encap(u8 *key_mod, u8 *src, u8 *dst, u32 len, u8 keycolor)
 {
 	return 0;
 }
@@ -56,7 +57,8 @@ __weak int blob_encap(u8 *key_mod, u8 *src, u8 *dst, u32 len)
  * Returns zero on success, CMD_RET_USAGE in case of misuse and negative
  * on error.
  */
-static int do_blob(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[])
+static int do_blob(struct cmd_tbl *cmdtp, int flag, int argc,
+		   char *const argv[])
 {
 	ulong key_addr, src_addr, dst_addr, len;
 	uint8_t *km_ptr, *src_ptr, *dst_ptr;
@@ -72,16 +74,17 @@ static int do_blob(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[])
 	else
 		return CMD_RET_USAGE;
 
-	src_addr = simple_strtoul(argv[2], NULL, 16);
-	dst_addr = simple_strtoul(argv[3], NULL, 16);
-	len = simple_strtoul(argv[4], NULL, 16);
-	key_addr = simple_strtoul(argv[5], NULL, 16);
+	src_addr = hextoul(argv[2], NULL);
+	dst_addr = hextoul(argv[3], NULL);
+	len = hextoul(argv[4], NULL);
+	key_addr = hextoul(argv[5], NULL);
 
 	km_ptr = (uint8_t *)(uintptr_t)key_addr;
 	src_ptr = (uint8_t *)(uintptr_t)src_addr;
 	dst_ptr = (uint8_t *)(uintptr_t)dst_addr;
 
-#if defined(CONFIG_ARCH_MX6) || defined(CONFIG_ARCH_MX7)
+#if defined(CONFIG_ARCH_MX6) || defined(CONFIG_ARCH_MX7) || \
+	defined(CONFIG_ARCH_MX7ULP) || defined(CONFIG_ARCH_IMX8M)
 
 	hab_caam_clock_enable(1);
 
@@ -92,9 +95,9 @@ static int do_blob(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[])
 #endif
 
 	if (enc)
-		ret = blob_encap(km_ptr, src_ptr, dst_ptr, len);
+		ret = blob_encap(km_ptr, src_ptr, dst_ptr, len, 0);
 	else
-		ret = blob_decap(km_ptr, src_ptr, dst_ptr, len);
+		ret = blob_decap(km_ptr, src_ptr, dst_ptr, len, 0);
 
 	return ret;
 }

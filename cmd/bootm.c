@@ -1,8 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * (C) Copyright 2000-2009
  * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 /*
@@ -11,15 +10,17 @@
 #include <common.h>
 #include <bootm.h>
 #include <command.h>
-#include <environment.h>
+#include <env.h>
 #include <errno.h>
 #include <image.h>
 #include <malloc.h>
 #include <nand.h>
 #include <asm/byteorder.h>
+#include <asm/global_data.h>
 #include <linux/ctype.h>
 #include <linux/err.h>
 #include <u-boot/zlib.h>
+#include <mapmem.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -34,12 +35,13 @@ extern flash_info_t flash_info[]; /* info for FLASH chips */
 #endif
 
 #if defined(CONFIG_CMD_IMLS) || defined(CONFIG_CMD_IMLS_NAND)
-static int do_imls(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+static int do_imls(struct cmd_tbl *cmdtp, int flag, int argc,
+		   char *const argv[]);
 #endif
 
 /* we overload the cmd field with our state machine info instead of a
  * function pointer */
-static cmd_tbl_t cmd_bootm_sub[] = {
+static struct cmd_tbl cmd_bootm_sub[] = {
 	U_BOOT_CMD_MKENT(start, 0, 1, (void *)BOOTM_STATE_START, "", ""),
 	U_BOOT_CMD_MKENT(loados, 0, 1, (void *)BOOTM_STATE_LOADOS, "", ""),
 #ifdef CONFIG_SYS_BOOT_RAMDISK_HIGH
@@ -55,12 +57,12 @@ static cmd_tbl_t cmd_bootm_sub[] = {
 	U_BOOT_CMD_MKENT(go, 0, 1, (void *)BOOTM_STATE_OS_GO, "", ""),
 };
 
-static int do_bootm_subcommand(cmd_tbl_t *cmdtp, int flag, int argc,
-			char * const argv[])
+static int do_bootm_subcommand(struct cmd_tbl *cmdtp, int flag, int argc,
+			       char *const argv[])
 {
 	int ret = 0;
 	long state;
-	cmd_tbl_t *c;
+	struct cmd_tbl *c;
 
 	c = find_cmd_tbl(argv[0], &cmd_bootm_sub[0], ARRAY_SIZE(cmd_bootm_sub));
 	argc--; argv++;
@@ -89,7 +91,7 @@ static int do_bootm_subcommand(cmd_tbl_t *cmdtp, int flag, int argc,
 /* bootm - boot application image from image in memory */
 /*******************************************************************/
 
-int do_bootm(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+int do_bootm(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 {
 #ifdef CONFIG_NEEDS_MANUAL_RELOC
 	static int relocated = 0;
@@ -110,7 +112,7 @@ int do_bootm(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	if (argc > 0) {
 		char *endp;
 
-		simple_strtoul(argv[0], &endp, 16);
+		hextoul(argv[0], &endp);
 		/* endp pointing to NULL means that argv[0] was just a
 		 * valid number, pass it along to the normal bootm processing
 		 *
@@ -123,16 +125,16 @@ int do_bootm(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 			return do_bootm_subcommand(cmdtp, flag, argc, argv);
 	}
 
-#ifdef CONFIG_SECURE_BOOT
-	extern uint32_t authenticate_image(
-			uint32_t ddr_start, uint32_t image_size);
+#ifdef CONFIG_IMX_HAB
+	extern int authenticate_image(
+			uint32_t ddr_start, uint32_t raw_image_size);
 
 #ifdef CONFIG_IMX_OPTEE
 	ulong tee_addr = 0;
 	int ret;
 	ulong zi_start, zi_end;
 
-	tee_addr = getenv_ulong("tee_addr", 16, tee_addr);
+	tee_addr = env_get_ulong("tee_addr", 16, tee_addr);
 	if (!tee_addr) {
 		printf("Not valid tee_addr, Please check\n");
 		return 1;
@@ -141,7 +143,7 @@ int do_bootm(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	switch (genimg_get_format((const void *)tee_addr)) {
 	case IMAGE_FORMAT_LEGACY:
 		if (authenticate_image(tee_addr,
-		       image_get_image_size((image_header_t *)tee_addr)) == 0) {
+		       image_get_image_size((image_header_t *)tee_addr)) != 0) {
 		       printf("Authenticate uImage Fail, Please check\n");
 		       return 1;
 		}
@@ -151,22 +153,22 @@ int do_bootm(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		return 1;
 	};
 
-	ret = bootz_setup(load_addr, &zi_start, &zi_end);
+	ret = bootz_setup(image_load_addr, &zi_start, &zi_end);
 	if (ret != 0)
 		return 1;
 
-	if (authenticate_image(load_addr, zi_end - zi_start) == 0) {
+	if (authenticate_image(image_load_addr, zi_end - zi_start) != 0) {
 		printf("Authenticate zImage Fail, Please check\n");
 		return 1;
 	}
 
 #else
 
-	switch (genimg_get_format((const void *)load_addr)) {
-#if defined(CONFIG_IMAGE_FORMAT_LEGACY)
+	switch (genimg_get_format((const void *)image_load_addr)) {
+#if defined(CONFIG_LEGACY_IMAGE_FORMAT)
 	case IMAGE_FORMAT_LEGACY:
-		if (authenticate_image(load_addr,
-			image_get_image_size((image_header_t *)load_addr)) == 0) {
+		if (authenticate_image(image_load_addr,
+			image_get_image_size((image_header_t *)image_load_addr)) != 0) {
 			printf("Authenticate uImage Fail, Please check\n");
 			return 1;
 		}
@@ -197,15 +199,14 @@ int do_bootm(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		BOOTM_STATE_OS_GO, &images, 1);
 }
 
-int bootm_maybe_autostart(cmd_tbl_t *cmdtp, const char *cmd)
+int bootm_maybe_autostart(struct cmd_tbl *cmdtp, const char *cmd)
 {
-	const char *ep = getenv("autostart");
-
-	if (ep && !strcmp(ep, "yes")) {
+	if (env_get_autostart()) {
 		char *local_args[2];
 		local_args[0] = (char *)cmd;
 		local_args[1] = NULL;
-		printf("Automatic boot of image at addr 0x%08lX ...\n", load_addr);
+		printf("Automatic boot of image at addr 0x%08lX ...\n",
+		       image_load_addr);
 		return do_bootm(cmdtp, 0, 1, local_args);
 	}
 
@@ -244,7 +245,7 @@ static char bootm_help_text[] =
 	"\tfdt     - relocate flat device tree\n"
 #endif
 	"\tcmdline - OS specific command line processing/setup\n"
-	"\tbdt     - OS specific bd_t processing\n"
+	"\tbdt     - OS specific bd_info processing\n"
 	"\tprep    - OS specific prep before relocation or go\n"
 #if defined(CONFIG_TRACE)
 	"\tfake    - OS specific fake start without go\n"
@@ -261,9 +262,9 @@ U_BOOT_CMD(
 /* bootd - boot default image */
 /*******************************************************************/
 #if defined(CONFIG_CMD_BOOTD)
-int do_bootd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+int do_bootd(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 {
-	return run_command(getenv("bootcmd"), flag);
+	return run_command(env_get("bootcmd"), flag);
 }
 
 U_BOOT_CMD(
@@ -286,18 +287,19 @@ U_BOOT_CMD(
 /* iminfo - print header info for a requested image */
 /*******************************************************************/
 #if defined(CONFIG_CMD_IMI)
-static int do_iminfo(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+static int do_iminfo(struct cmd_tbl *cmdtp, int flag, int argc,
+		     char *const argv[])
 {
 	int	arg;
 	ulong	addr;
 	int	rcode = 0;
 
 	if (argc < 2) {
-		return image_info(load_addr);
+		return image_info(image_load_addr);
 	}
 
 	for (arg = 1; arg < argc; ++arg) {
-		addr = simple_strtoul(argv[arg], NULL, 16);
+		addr = hextoul(argv[arg], NULL);
 		if (image_info(addr) != 0)
 			rcode = 1;
 	}
@@ -306,21 +308,23 @@ static int do_iminfo(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 static int image_info(ulong addr)
 {
-	void *hdr = (void *)addr;
+	void *hdr = (void *)map_sysmem(addr, 0);
 
 	printf("\n## Checking Image at %08lx ...\n", addr);
 
 	switch (genimg_get_format(hdr)) {
-#if defined(CONFIG_IMAGE_FORMAT_LEGACY)
+#if defined(CONFIG_LEGACY_IMAGE_FORMAT)
 	case IMAGE_FORMAT_LEGACY:
 		puts("   Legacy image found\n");
 		if (!image_check_magic(hdr)) {
 			puts("   Bad Magic Number\n");
+			unmap_sysmem(hdr);
 			return 1;
 		}
 
 		if (!image_check_hcrc(hdr)) {
 			puts("   Bad Header Checksum\n");
+			unmap_sysmem(hdr);
 			return 1;
 		}
 
@@ -329,23 +333,27 @@ static int image_info(ulong addr)
 		puts("   Verifying Checksum ... ");
 		if (!image_check_dcrc(hdr)) {
 			puts("   Bad Data CRC\n");
+			unmap_sysmem(hdr);
 			return 1;
 		}
 		puts("OK\n");
+		unmap_sysmem(hdr);
 		return 0;
 #endif
 #if defined(CONFIG_ANDROID_BOOT_IMAGE)
 	case IMAGE_FORMAT_ANDROID:
 		puts("   Android image found\n");
 		android_print_contents(hdr);
+		unmap_sysmem(hdr);
 		return 0;
 #endif
 #if defined(CONFIG_FIT)
 	case IMAGE_FORMAT_FIT:
 		puts("   FIT image found\n");
 
-		if (!fit_check_format(hdr)) {
+		if (fit_check_format(hdr, IMAGE_SIZE_INVAL)) {
 			puts("Bad FIT image format!\n");
+			unmap_sysmem(hdr);
 			return 1;
 		}
 
@@ -353,9 +361,11 @@ static int image_info(ulong addr)
 
 		if (!fit_all_image_verify(hdr)) {
 			puts("Bad hash in FIT image!\n");
+			unmap_sysmem(hdr);
 			return 1;
 		}
 
+		unmap_sysmem(hdr);
 		return 0;
 #endif
 	default:
@@ -363,6 +373,7 @@ static int image_info(ulong addr)
 		break;
 	}
 
+	unmap_sysmem(hdr);
 	return 1;
 }
 
@@ -388,7 +399,7 @@ static int do_imls_nor(void)
 	void *hdr;
 
 	for (i = 0, info = &flash_info[0];
-		i < CONFIG_SYS_MAX_FLASH_BANKS; ++i, ++info) {
+		i < CFI_FLASH_BANKS; ++i, ++info) {
 
 		if (info->flash_id == FLASH_UNKNOWN)
 			goto next_bank;
@@ -399,7 +410,7 @@ static int do_imls_nor(void)
 				goto next_sector;
 
 			switch (genimg_get_format(hdr)) {
-#if defined(CONFIG_IMAGE_FORMAT_LEGACY)
+#if defined(CONFIG_LEGACY_IMAGE_FORMAT)
 			case IMAGE_FORMAT_LEGACY:
 				if (!image_check_hcrc(hdr))
 					goto next_sector;
@@ -417,7 +428,7 @@ static int do_imls_nor(void)
 #endif
 #if defined(CONFIG_FIT)
 			case IMAGE_FORMAT_FIT:
-				if (!fit_check_format(hdr))
+				if (fit_check_format(hdr, IMAGE_SIZE_INVAL))
 					goto next_sector;
 
 				printf("FIT Image at %08lX:\n", (ulong)hdr);
@@ -497,7 +508,7 @@ static int nand_imls_fitimage(struct mtd_info *mtd, int nand_dev, loff_t off,
 		return ret;
 	}
 
-	if (!fit_check_format(imgdata)) {
+	if (fit_check_format(imgdata, IMAGE_SIZE_INVAL)) {
 		free(imgdata);
 		return 0;
 	}
@@ -526,7 +537,7 @@ static int do_imls_nand(void)
 	printf("\n");
 
 	for (nand_dev = 0; nand_dev < CONFIG_SYS_MAX_NAND_DEVICE; nand_dev++) {
-		mtd = nand_info[nand_dev];
+		mtd = get_nand_dev_by_index(nand_dev);
 		if (!mtd->name || !mtd->size)
 			continue;
 
@@ -547,7 +558,7 @@ static int do_imls_nand(void)
 			}
 
 			switch (genimg_get_format(buffer)) {
-#if defined(CONFIG_IMAGE_FORMAT_LEGACY)
+#if defined(CONFIG_LEGACY_IMAGE_FORMAT)
 			case IMAGE_FORMAT_LEGACY:
 				header = (const image_header_t *)buffer;
 
@@ -570,7 +581,8 @@ static int do_imls_nand(void)
 #endif
 
 #if defined(CONFIG_CMD_IMLS) || defined(CONFIG_CMD_IMLS_NAND)
-static int do_imls(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+static int do_imls(struct cmd_tbl *cmdtp, int flag, int argc,
+		   char *const argv[])
 {
 	int ret_nor = 0, ret_nand = 0;
 

@@ -38,10 +38,6 @@
  */
 int rpmb_storage_proxy_init(struct trusty_ipc_dev *dev, void *rpmb_dev);
 /*
- * Poll for and handle RPMB storange events. Returns one of trusty_err.
- */
-int rpmb_storage_proxy_poll(void);
-/*
  * Shutdown RPMB storage proxy
  *
  * @dev: initialized with trusty_ipc_dev_create
@@ -72,5 +68,21 @@ int rpmb_storage_send(void *rpmb_dev,
  * Implementation is platform specific.
  */
 void *rpmb_storage_get_ctx(void);
+
+/*
+ * Put back RPMB device. This is called when the RPMB storage proxy is
+ * shutdown
+ */
+void rpmb_storage_put_ctx(void *dev);
+
+/*
+ * Set rpmb key by secure side.
+ */
+int storage_set_rpmb_key(void);
+
+/*
+ * Erase rpmb storage by secure side.
+ */
+int storage_erase_rpmb(void);
 
 #endif /* TRUSTY_RPMB_H_ */

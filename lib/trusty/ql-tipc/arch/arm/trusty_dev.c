@@ -61,12 +61,12 @@ static unsigned long smc(unsigned long r0,
                          unsigned long r2,
                          unsigned long r3)
 {
-    register unsigned long _r0 asm(SMC_ARG0) = r0;
-    register unsigned long _r1 asm(SMC_ARG1) = r1;
-    register unsigned long _r2 asm(SMC_ARG2) = r2;
-    register unsigned long _r3 asm(SMC_ARG3) = r3;
+    register unsigned long _r0 __asm__(SMC_ARG0) = r0;
+    register unsigned long _r1 __asm__(SMC_ARG1) = r1;
+    register unsigned long _r2 __asm__(SMC_ARG2) = r2;
+    register unsigned long _r3 __asm__(SMC_ARG3) = r3;
 
-    asm volatile(
+    __asm__ volatile(
         __asmeq("%0", SMC_ARG0)
         __asmeq("%1", SMC_ARG1)
         __asmeq("%2", SMC_ARG2)
@@ -81,6 +81,14 @@ static unsigned long smc(unsigned long r0,
         : "r" (_r0), "r" (_r1), "r" (_r2), "r" (_r3)
         : SMC_REGISTERS_TRASHED);
     return _r0;
+}
+
+int32_t trusty_simple_fast_call32(uint32_t smcnr,
+                                  uint32_t a0, uint32_t a1, uint32_t a2)
+{
+    trusty_assert(SMC_IS_FASTCALL(smcnr));
+
+    return smc(smcnr, a0, a1, a2);
 }
 
 static int32_t trusty_fast_call32(struct trusty_dev *dev, uint32_t smcnr,

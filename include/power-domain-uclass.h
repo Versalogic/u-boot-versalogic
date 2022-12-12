@@ -1,7 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (c) 2016, NVIDIA CORPORATION.
- *
- * SPDX-License-Identifier: GPL-2.0
  */
 
 #ifndef _POWER_DOMAIN_UCLASS_H
@@ -40,7 +39,7 @@ struct power_domain_ops {
 	 * @return 0 if OK, or a negative error code.
 	 */
 	int (*of_xlate)(struct power_domain *power_domain,
-			struct fdtdec_phandle_args *args);
+			struct ofnode_phandle_args *args);
 	/**
 	 * request - Request a translated power domain.
 	 *
@@ -55,14 +54,14 @@ struct power_domain_ops {
 	 */
 	int (*request)(struct power_domain *power_domain);
 	/**
-	 * free - Free a previously requested power domain.
+	 * rfree - Free a previously requested power domain.
 	 *
 	 * This is the implementation of the client power_domain_free() API.
 	 *
 	 * @power_domain:	The power domain to free.
 	 * @return 0 if OK, or a negative error code.
 	 */
-	int (*free)(struct power_domain *power_domain);
+	int (*rfree)(struct power_domain *power_domain);
 	/**
 	 * on - Power on a power domain.
 	 *

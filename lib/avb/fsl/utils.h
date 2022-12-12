@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 Freescale Semiconductor, Inc.
- * Copyright 2017 NXP
+ * Copyright 2018 NXP
  *
  * SPDX-License-Identifier:     GPL-2.0+
  */
@@ -25,7 +25,18 @@ struct margin_pos {
 };
 typedef struct margin_pos margin_pos_t;
 
-int get_margin_pos(uint64_t part_start, uint64_t part_end, unsigned long blksz,
-				margin_pos_t *margin, int64_t offset, size_t num_bytes, bool allow_partial);
+int get_margin_pos(long part_start, long part_end, long blksz,
+		   margin_pos_t *margin, long offset, size_t num_bytes,
+		   bool allow_partial);
+
+int read_from_partition_in_bytes(struct blk_desc *fs_dev_desc,
+				 struct disk_partition *info,
+				 int64_t offset, size_t num_bytes,
+		void* buffer, size_t* out_num_read);
+
+int write_to_partition_in_bytes(struct blk_desc *fs_dev_desc,
+				struct disk_partition *info, int64_t offset,
+				size_t num_bytes, void* buffer,
+				size_t *out_num_write);
 
 #endif

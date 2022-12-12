@@ -1,10 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright (C) 1998  Dan Malek <dmalek@jlc.net>
  * Copyright (C) 1999  Magnus Damm <kieraypc01.p.y.kie.era.ericsson.se>
  * Copyright (C) 2000, 2001,2002 Wolfgang Denk <wd@denx.de>
  * Copyright Freescale Semiconductor, Inc. 2004, 2006, 2008.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 /*
@@ -14,9 +13,6 @@
 #include <asm-offsets.h>
 #include <config.h>
 #include <mpc83xx.h>
-#include <version.h>
-
-#define CONFIG_83XX	1		/* needed for Linux kernel header files*/
 
 #include <ppc_asm.tmpl>
 #include <ppc_defs.h>
@@ -24,6 +20,10 @@
 #include <asm/cache.h>
 #include <asm/mmu.h>
 #include <asm/u-boot.h>
+
+#include "hrcw/hrcw.h"
+#include "bats/bats.h"
+#include "hid/hid.h"
 
 /* We don't want the  MMU yet.
  */
@@ -89,12 +89,6 @@
  */
 	.long	0x27051956		/* U-Boot Magic Number */
 
-	.globl	version_string
-version_string:
-	.ascii U_BOOT_VERSION_STRING, "\0"
-
-	.align 2
-
 	.globl enable_addr_trans
 enable_addr_trans:
 	/* enable address translation */
@@ -116,34 +110,9 @@ disable_addr_trans:
 	mtspr	SRR1, r3
 	rfi
 
-	.globl get_svr
-get_svr:
-	mfspr	r3, SVR
-	blr
-
-	.globl get_pvr
-get_pvr:
-	mfspr	r3, PVR
-	blr
-
-	.globl	ppcDWstore
-ppcDWstore:
-	lfd	1, 0(r4)
-	stfd	1, 0(r3)
-	blr
-
-	.globl	ppcDWload
-ppcDWload:
-	lfd	1, 0(r3)
-	stfd	1, 0(r4)
-	blr
-
 #ifndef CONFIG_DEFAULT_IMMR
 #error CONFIG_DEFAULT_IMMR must be defined
-#endif /* CONFIG_SYS_DEFAULT_IMMR */
-#ifndef CONFIG_SYS_IMMR
-#define CONFIG_SYS_IMMR CONFIG_DEFAULT_IMMR
-#endif /* CONFIG_SYS_IMMR */
+#endif /* CONFIG_DEFAULT_IMMR */
 
 /*
  * After configuration, a system reset exception is executed using the
@@ -274,14 +243,14 @@ in_flash:
 	cmplw	r3, r4
 	bne	1b
 
-#ifdef CONFIG_SYS_MALLOC_F_LEN
+#if CONFIG_VAL(SYS_MALLOC_F_LEN)
 
-#if CONFIG_SYS_MALLOC_F_LEN + GENERATED_GBL_DATA_SIZE > CONFIG_SYS_INIT_RAM_SIZE
-#error "CONFIG_SYS_MALLOC_F_LEN too large to fit into initial RAM."
+#if CONFIG_VAL(SYS_MALLOC_F_LEN) + GENERATED_GBL_DATA_SIZE > CONFIG_SYS_INIT_RAM_SIZE
+#error "SYS_MALLOC_F_LEN too large to fit into initial RAM."
 #endif
 
 	/* r3 = new stack pointer / pre-reloc malloc area */
-	subi    r3, r3, CONFIG_SYS_MALLOC_F_LEN
+	subi    r3, r3, CONFIG_VAL(SYS_MALLOC_F_LEN)
 
 	/* Set pointer to pre-reloc malloc area in GD */
 	stw     r3, GD_MALLOC_BASE(r4)
@@ -299,6 +268,9 @@ in_flash:
 	/*------------------------------------------------------*/
 
 	GET_GOT			/* initialize GOT access	*/
+	/* Needed for -msingle-pic-base */
+	bl	_GLOBAL_OFFSET_TABLE_@local-4
+	mflr	r30
 
 	/* r3: IMMR */
 	lis	r3, CONFIG_SYS_IMMR@h
@@ -820,7 +792,7 @@ flush_dcache:
 /*-------------------------------------------------------------------*/
 
 /*
- * void relocate_code (addr_sp, gd, addr_moni)
+ * void relocate_code(addr_sp, gd, addr_moni)
  *
  * This "function" does not return, instead it continues in RAM
  * after relocating the monitor code.

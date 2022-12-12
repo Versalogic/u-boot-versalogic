@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  *	Andesboot - Startup Code for Whitiger core
  *
@@ -5,8 +6,6 @@
  *	Copyright (C) 2006	Shawn Lin <nobuhiro@andestech.com>
  *	Copyright (C) 2011	Macpaul Lin <macpaul@andestech.com>
  *				Greentime Hu <greentime@andestech.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 .pic
@@ -21,7 +20,7 @@
  */
 #define ENA_DCAC		2UL
 #define DIS_DCAC		~ENA_DCAC
-#define ICAC_MEM_KBF_ISET	(0x07)	 	! I Cache sets per way
+#define ICAC_MEM_KBF_ISET	(0x07)		! I Cache sets per way
 #define ICAC_MEM_KBF_IWAY	(0x07<<3)	! I cache ways
 #define ICAC_MEM_KBF_ISZ	(0x07<<6)	! I cache line size
 #define DCAC_MEM_KBF_DSET	(0x07)		! D Cache sets per way
@@ -90,24 +89,6 @@ _start:	j	reset
 _TEXT_BASE:
 	.word	CONFIG_SYS_TEXT_BASE
 
-/*
- * These are defined in the board-specific linker script.
- * Subtracting _start from them lets the linker put their
- * relative position in the executable instead of leaving
- * them null.
- */
-#ifdef CONFIG_USE_IRQ
-/* IRQ stack memory (calculated at run-time) */
-.globl IRQ_STACK_START
-IRQ_STACK_START:
-	.word 0x0badc0de
-
-/* IRQ stack memory (calculated at run-time) */
-.globl FIQ_STACK_START
-FIQ_STACK_START:
-	.word 0x0badc0de
-#endif
-
 /* IRQ stack memory (calculated at run-time) + 8 bytes */
 .globl IRQ_STACK_START_IN
 IRQ_STACK_START_IN:
@@ -132,13 +113,68 @@ reset_gp:
 
 set_ivb:
 	li	$r0, 0x0
-
 	/* turn on BTB */
 	mtsr	$r0, $misc_ctl
 	/* set IVIC, vector size: 4 bytes, base: 0x0 */
 	mtsr	$r0, $ivb
+/*
+ * MMU_CTL NTC0 Non-cacheable
+ */
+	li	$r0, ~0x6
+	mfsr	$r1, $mr0
+	and	$r1, $r1, $r0
+	mtsr	$r1, $mr0
 
-#ifndef CONFIG_SKIP_LOWLEVEL_INIT
+	li	$r0, ~0x3
+	mfsr	$r1, $mr8
+	and	$r1, $r1, $r0
+	mtsr	$r1, $mr8
+#if !(CONFIG_IS_ENABLED(SYS_ICACHE_OFF) && CONFIG_IS_ENABLED(SYS_DCACHE_OFF))
+/*
+ * MMU_CTL NTC0 Cacheable/Write-Back
+ */
+	li	$r0, 0x4
+	mfsr	$r1, $mr0
+	or	$r1, $r1, $r0
+	mtsr	$r1, $mr0
+#endif
+
+#if !CONFIG_IS_ENABLED(SYS_DCACHE_OFF)
+#ifdef CONFIG_ARCH_MAP_SYSMEM
+/*
+ * MMU_CTL NTC1 Non-cacheable
+ */
+	li	$r0, ~0x18
+	mfsr	$r1, $mr0
+	and	$r1, $r1, $r0
+	mtsr	$r1, $mr0
+/*
+ * MMU_CTL NTM1 mapping for partition 0
+ */
+	li	$r0, ~0x6000
+	mfsr	$r1, $mr0
+	and	$r1, $r1, $r0
+	mtsr	$r1, $mr0
+#endif
+#endif
+
+#if !CONFIG_IS_ENABLED(SYS_ICACHE_OFF)
+	li	$r0, 0x1
+	mfsr	$r1, $mr8
+	or	$r1, $r1, $r0
+	mtsr	$r1, $mr8
+#endif
+
+#if !CONFIG_IS_ENABLED(SYS_DCACHE_OFF)
+	li	$r0, 0x2
+	mfsr	$r1, $mr8
+	or	$r1, $r1, $r0
+	mtsr	$r1, $mr8
+#endif
+
+	jal mem_init
+
+#if !CONFIG_IS_ENABLED(SKIP_LOWLEVEL_INIT)
 	jal	lowlevel_init
 /*
  *  gp = ~VMA          for burn mode
@@ -151,7 +187,6 @@ update_gp:
 	ori     $gp, $gp, lo12(_GLOBAL_OFFSET_TABLE_-4)
 	add5.pc $gp
 #endif
-
 /*
  *  do critical initializations first (shall be in short time)
  *  do self_relocation ASAP.
@@ -166,24 +201,19 @@ update_gp:
 #endif
 
 /*
- * Do CPU critical regs init only at reboot,
- * not when booting from ram
- */
-#ifdef CONFIG_INIT_CRITICAL
-	jal	cpu_init_crit		! Do CPU critical regs init
-#endif
-
-/*
  * Set stackpointer in internal RAM to call board_init_f
  * $sp must be 8-byte alignment for ABI compliance.
  */
 call_board_init_f:
 	li		$sp, CONFIG_SYS_INIT_SP_ADDR
-	li		$r10, GD_SIZE	/* get GD size */
-	sub		$sp, $sp, $r10	/* GD start addr */
-	move	$r10, $sp
+	move	$r0, $sp
+	bal	board_init_f_alloc_reserve
+	move	$sp, $r0
+	bal	board_init_f_init_reserve
+#ifdef CONFIG_DEBUG_UART
+	bal	debug_uart_init
+#endif
 	li		$r0, 0x00000000
-
 #ifdef __PIC__
 #ifdef __NDS32_N1213_43U1H__
 /* __NDS32_N1213_43U1H__ implies NDS32 V0 ISA */
@@ -193,7 +223,7 @@ call_board_init_f:
 	j	board_init_f		! jump to board_init_f() in lib/board.c
 
 /*
- * void relocate_code (addr_sp, gd, addr_moni)
+ * void relocate_code(addr_sp, gd, addr_moni)
  *
  * This "function" does not return, instead it continues in RAM
  * after relocating the monitor code.
@@ -219,12 +249,10 @@ stack_setup:
 
 	la	 $r1, _end@GOTOFF
 	move $r2, $r6			/* r2 <- scratch for copy_loop */
-
 copy_loop:
-	lwi.p	$r7, [$r0], #4
-	swi.p	$r7, [$r2], #4
+	lmw.bim	$r11, [$r0], $r18
+	smw.bim	$r11, [$r2], $r18
 	blt	$r0, $r1, copy_loop
-
 /*
  * fix relocations related issues
  */
@@ -264,6 +292,8 @@ clbss_l:
  * initialization, now running from RAM.
  */
 call_board_init_r:
+	bal invalidate_icache_all
+	bal flush_dcache_all
 	la	$r0, board_init_r@GOTOFF
 	move	$lp, $r0		/* offset of board_init_r() */
 	add	$lp, $lp, $r9		/* real address of board_init_r() */
@@ -279,49 +309,6 @@ call_board_init_r:
 
 	/* jump to it ... */
 	jr	$lp			/* jump to board_init_r() */
-
-/*
- * Initialize CPU critical registers
- *
- *	1.	Setup control registers
- *		1.1 Mask all IRQs
- *		1.2 Flush cache and TLB
- *		1.3 Disable MMU and cache
- *	2.	Setup memory timing
- */
-
-cpu_init_crit:
-
-	move	$r0, $lp		/* push	ra */
-
-	/* Disable Interrupts by clear GIE in $PSW reg */
-	setgie.d
-
-	/* Flush caches and TLB */
-	/* Invalidate caches */
-	jal	invalidate_icac
-	jal	invalidate_dcac
-
-	/* Flush TLB */
-	mfsr	$p0, $MMU_CFG
-	andi	$p0, $p0, 0x3			! MMPS
-	li	$p1, 0x2			! TLB MMU
-	bne	$p0, $p1, 1f
-	tlbop	flushall			! Flush TLB
-
-1:
-	! Disable MMU, Dcache
-	! Whitiger is MMU disabled when reset
-	! Disable the D$
-	mfsr	$p0, MR_CAC_CTL			! Get the $CACHE_CTL reg
-	li	$p1, DIS_DCAC
-	and	$p0, $p0, $p1			! Set DC_EN bit
-	mtsr	$p0, MR_CAC_CTL			! write back the $CACHE_CTL reg
-	isb
-
-	move	$lp, $r0
-2:
-	ret
 
 /*
  * Invalidate I$
@@ -447,21 +434,21 @@ tlb_fill:
 	SAVE_ALL
 	move	$r0, $sp			! To get the kernel stack
 	li	$r1, 1				! Determine interruption type
-	bal 	do_interruption
+	bal	do_interruption
 
 	.align	5
 tlb_not_present:
 	SAVE_ALL
 	move	$r0, $sp			! To get the kernel stack
 	li	$r1, 2				! Determine interruption type
-	bal 	do_interruption
+	bal	do_interruption
 
 	.align	5
 tlb_misc:
 	SAVE_ALL
 	move	$r0, $sp			! To get the kernel stack
 	li	$r1, 3				! Determine interruption type
-	bal 	do_interruption
+	bal	do_interruption
 
 	.align	5
 tlb_vlpt_miss:
@@ -513,25 +500,3 @@ software_interrupt:
 	bal	do_interruption
 
 	.align	5
-
-/*
- * void reset_cpu(ulong addr);
- * $r0: input address to jump to
- */
-.globl reset_cpu
-reset_cpu:
-/* No need to disable MMU because we never enable it */
-
-	bal	invalidate_icac
-	bal	invalidate_dcac
-	mfsr	$p0, $MMU_CFG
-	andi	$p0, $p0, 0x3			! MMPS
-	li	$p1, 0x2			! TLB MMU
-	bne	$p0, $p1, 1f
-	tlbop	flushall			! Flush TLB
-1:
-	mfsr	$p0, MR_CAC_CTL			! Get the $CACHE_CTL reg
-	li	$p1, DIS_DCAC
-	and	$p0, $p0, $p1			! Clear the DC_EN bit
-	mtsr	$p0, MR_CAC_CTL			! Write back the $CACHE_CTL reg
-	br	$r0				! Jump to the input address

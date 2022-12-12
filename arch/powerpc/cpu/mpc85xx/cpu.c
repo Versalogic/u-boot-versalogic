@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright 2004,2007-2011 Freescale Semiconductor, Inc.
  * (C) Copyright 2002, 2003 Motorola Inc.
@@ -5,16 +6,22 @@
  *
  * (C) Copyright 2000
  * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <config.h>
 #include <common.h>
+#include <cpu_func.h>
+#include <clock_legacy.h>
+#include <init.h>
+#include <irq_func.h>
+#include <log.h>
+#include <time.h>
+#include <vsprintf.h>
 #include <watchdog.h>
 #include <command.h>
 #include <fsl_esdhc.h>
 #include <asm/cache.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/mmu.h>
 #include <fsl_ifc.h>
@@ -23,6 +30,8 @@
 #include <post.h>
 #include <asm/processor.h>
 #include <fsl_ddr_sdram.h>
+#include <asm/ppc.h>
+#include <linux/delay.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -44,7 +53,8 @@ int checkcpu (void)
 	uint major, minor;
 	struct cpu_type *cpu;
 	char buf1[32], buf2[32];
-#if defined(CONFIG_DDR_CLK_FREQ) || defined(CONFIG_FSL_CORENET)
+#if defined(CONFIG_DYNAMIC_DDR_CLK_FREQ) || \
+	defined(CONFIG_STATIC_DDR_CLK_FREQ) || defined(CONFIG_FSL_CORENET)
 	ccsr_gur_t __iomem *gur =
 		(void __iomem *)(CONFIG_SYS_MPC85xx_GUTS_ADDR);
 #endif
@@ -62,12 +72,12 @@ int checkcpu (void)
 		>> FSL_CORENET_RCWSR5_DDR_SYNC_SHIFT;
 #endif /* CONFIG_SYS_FSL_QORIQ_CHASSIS2 */
 #else	/* CONFIG_FSL_CORENET */
-#ifdef CONFIG_DDR_CLK_FREQ
+#if defined(CONFIG_DYNAMIC_DDR_CLK_FREQ) || defined(CONFIG_STATIC_DDR_CLK_FREQ)
 	u32 ddr_ratio = ((gur->porpllsr) & MPC85xx_PORPLLSR_DDR_RATIO)
 		>> MPC85xx_PORPLLSR_DDR_RATIO_SHIFT;
 #else
 	u32 ddr_ratio = 0;
-#endif /* CONFIG_DDR_CLK_FREQ */
+#endif /* CONFIG_DYNAMIC_DDR_CLK_FREQ || CONFIG_STATIC_DDR_CLK_FREQ */
 #endif /* CONFIG_FSL_CORENET */
 
 	unsigned int i, core, nr_cores = cpu_numcores();
@@ -290,11 +300,10 @@ int checkcpu (void)
 
 /* ------------------------------------------------------------------------- */
 
-int do_reset (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+int do_reset(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 {
 /* Everything after the first generation of PQ3 parts has RSTCR */
-#if defined(CONFIG_ARCH_MPC8540) || defined(CONFIG_ARCH_MPC8541) || \
-	defined(CONFIG_ARCH_MPC8555) || defined(CONFIG_ARCH_MPC8560)
+#if defined(CONFIG_ARCH_MPC8540) || defined(CONFIG_ARCH_MPC8560)
 	unsigned long val, msr;
 
 	/*
@@ -329,7 +338,7 @@ int do_reset (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 #ifndef CONFIG_SYS_FSL_TBCLK_DIV
 #define CONFIG_SYS_FSL_TBCLK_DIV 8
 #endif
-__weak unsigned long get_tbclk (void)
+__weak unsigned long get_tbclk(void)
 {
 	unsigned long tbclk_div = CONFIG_SYS_FSL_TBCLK_DIV;
 
@@ -370,7 +379,7 @@ watchdog_reset(void)
  * Initializes on-chip MMC controllers.
  * to override, implement board_mmc_init()
  */
-int cpu_mmc_init(bd_t *bis)
+int cpu_mmc_init(struct bd_info *bis)
 {
 #ifdef CONFIG_FSL_ESDHC
 	return fsl_esdhc_mmc_init(bis);
@@ -384,10 +393,12 @@ int cpu_mmc_init(bd_t *bis)
  * Currently prints out LAWs, BR0/OR0 for LBC, CSPR/CSOR/Timing
  * parameters for IFC and TLBs
  */
-void mpc85xx_reginfo(void)
+void print_reginfo(void)
 {
 	print_tlbcam();
+#ifdef CONFIG_FSL_LAW
 	print_laws();
+#endif
 #if defined(CONFIG_FSL_LBC)
 	print_lbc_regs();
 #endif
@@ -401,17 +412,19 @@ void mpc85xx_reginfo(void)
 #ifndef CONFIG_FSL_CORENET
 #if (defined(CONFIG_SYS_RAMBOOT) || defined(CONFIG_SPL)) && \
 	!defined(CONFIG_SYS_INIT_L2_ADDR)
-phys_size_t initdram(int board_type)
+int dram_init(void)
 {
 #if defined(CONFIG_SPD_EEPROM) || defined(CONFIG_DDR_SPD) || \
 	defined(CONFIG_ARCH_QEMU_E500)
-	return fsl_ddr_sdram_size();
+	gd->ram_size = fsl_ddr_sdram_size();
 #else
-	return (phys_size_t)CONFIG_SYS_SDRAM_SIZE * 1024 * 1024;
+	gd->ram_size = (phys_size_t)CONFIG_SYS_SDRAM_SIZE * 1024 * 1024;
 #endif
+
+	return 0;
 }
 #else /* CONFIG_SYS_RAMBOOT */
-phys_size_t initdram(int board_type)
+int dram_init(void)
 {
 	phys_size_t dram_size = 0;
 
@@ -460,7 +473,9 @@ phys_size_t initdram(int board_type)
 #endif
 
 	debug("DDR: ");
-	return dram_size;
+	gd->ram_size = dram_size;
+
+	return 0;
 }
 #endif /* CONFIG_SYS_RAMBOOT */
 #endif

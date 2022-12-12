@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  *
  * Common board functions for OMAP3 based boards.
@@ -13,11 +14,11 @@
  *      Richard Woodruff <r-woodruff2@ti.com>
  *      Syed Mohammed Khasim <khasim@ti.com>
  *
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 #include <common.h>
+#include <command.h>
 #include <dm.h>
+#include <init.h>
 #include <spl.h>
 #include <asm/io.h>
 #include <asm/arch/sys_proto.h>
@@ -28,16 +29,16 @@
 #include <asm/omap_common.h>
 #include <linux/compiler.h>
 
-DECLARE_GLOBAL_DATA_PTR;
-
 /* Declarations */
 extern omap3_sysinfo sysinfo;
 #ifndef CONFIG_SYS_L2CACHE_OFF
 static void omap3_invalidate_l2_cache_secure(void);
 #endif
 
-#ifdef CONFIG_DM_GPIO
-static const struct omap_gpio_platdata omap34xx_gpio[] = {
+#if CONFIG_IS_ENABLED(DM_GPIO)
+#if !CONFIG_IS_ENABLED(OF_CONTROL)
+/* Manually initialize GPIO banks when OF_CONTROL doesn't */
+static const struct omap_gpio_plat omap34xx_gpio[] = {
 	{ 0, OMAP34XX_GPIO1_BASE },
 	{ 1, OMAP34XX_GPIO2_BASE },
 	{ 2, OMAP34XX_GPIO3_BASE },
@@ -46,7 +47,7 @@ static const struct omap_gpio_platdata omap34xx_gpio[] = {
 	{ 5, OMAP34XX_GPIO6_BASE },
 };
 
-U_BOOT_DEVICES(am33xx_gpios) = {
+U_BOOT_DRVINFOS(omap34xx_gpios) = {
 	{ "gpio_omap", &omap34xx_gpio[0] },
 	{ "gpio_omap", &omap34xx_gpio[1] },
 	{ "gpio_omap", &omap34xx_gpio[2] },
@@ -54,7 +55,7 @@ U_BOOT_DEVICES(am33xx_gpios) = {
 	{ "gpio_omap", &omap34xx_gpio[4] },
 	{ "gpio_omap", &omap34xx_gpio[5] },
 };
-
+#endif
 #else
 
 static const struct gpio_bank gpio_bank_34xx[6] = {
@@ -70,12 +71,20 @@ const struct gpio_bank *const omap_gpio_bank = gpio_bank_34xx;
 
 #endif
 
+void early_system_init(void)
+{
+	hw_data_init();
+}
+
+#if !CONFIG_IS_ENABLED(SKIP_LOWLEVEL_INIT) && \
+	!CONFIG_IS_ENABLED(SKIP_LOWLEVEL_INIT_ONLY)
+
 /******************************************************************************
  * Routine: secure_unlock
  * Description: Setup security registers for access
  *              (GP Device only)
  *****************************************************************************/
-void secure_unlock_mem(void)
+static void secure_unlock_mem(void)
 {
 	struct pm *pm_rt_ape_base = (struct pm *)PM_RT_APE_BASE_ADDR_ARM;
 	struct pm *pm_gpmc_base = (struct pm *)PM_GPMC_BASE_ADDR_ARM;
@@ -113,7 +122,7 @@ void secure_unlock_mem(void)
  *		configure secure registers and exit secure world
  *              general use.
  *****************************************************************************/
-void secureworld_exit(void)
+static void secureworld_exit(void)
 {
 	unsigned long i;
 
@@ -144,7 +153,7 @@ void secureworld_exit(void)
  * Description: If chip is GP/EMU(special) type, unlock the SRAM for
  *              general use.
  *****************************************************************************/
-void try_unlock_memory(void)
+static void try_unlock_memory(void)
 {
 	int mode;
 	int in_sdram = is_running_in_sdram();
@@ -181,6 +190,7 @@ void try_unlock_memory(void)
 void s_init(void)
 {
 	watchdog_init();
+	early_system_init();
 
 	try_unlock_memory();
 
@@ -200,11 +210,19 @@ void s_init(void)
 	ehci_clocks_enable();
 #endif
 }
+#endif
 
 #ifdef CONFIG_SPL_BUILD
 void board_init_f(ulong dummy)
 {
+	early_system_init();
 	mem_init();
+	/*
+	* Save the boot parameters passed from romcode.
+	* We cannot delay the saving further than this,
+	* to prevent overwrites.
+	*/
+	save_omap_boot_params();
 }
 #endif
 
@@ -267,7 +285,8 @@ void abort(void)
 /******************************************************************************
  * OMAP3 specific command to switch between NAND HW and SW ecc
  *****************************************************************************/
-static int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char * const argv[])
+static int do_switch_ecc(struct cmd_tbl *cmdtp, int flag, int argc,
+			 char *const argv[])
 {
 	int hw, strength = 1;
 
@@ -362,6 +381,16 @@ void __weak omap3_set_aux_cr_secure(u32 acr)
 	emu_romcode_params.param1 = acr;
 	omap3_emu_romcode_call(OMAP3_EMU_HAL_API_WRITE_ACR,
 			       (u32 *)&emu_romcode_params);
+}
+
+void v7_arch_cp15_set_l2aux_ctrl(u32 l2auxctrl, u32 cpu_midr,
+				 u32 cpu_rev_comb, u32 cpu_variant,
+				 u32 cpu_rev)
+{
+	if (get_device_type() == GP_DEVICE)
+		omap_smc1(OMAP3_GP_ROMCODE_API_WRITE_L2ACR, l2auxctrl);
+
+	/* L2 Cache Auxiliary Control Register is not banked */
 }
 
 void v7_arch_cp15_set_acr(u32 acr, u32 cpu_midr, u32 cpu_rev_comb,

@@ -24,6 +24,8 @@
 
 #include <trusty/sysdeps.h>
 
+#include <asm/system.h>
+#include <command.h>
 #include <common.h>
 #include <linux/string.h>
 #include <malloc.h>
@@ -59,12 +61,12 @@ void trusty_abort(void)
     __builtin_unreachable();
 }
 
-void trusty_printv(const char *message, ...)
+void trusty_printf(const char *format, ...)
 {
     va_list ap;
 
-    va_start(ap, message);
-    vprintf(message, ap);
+    va_start(ap, format);
+    vprintf(format, ap);
     va_end(ap);
 }
 
@@ -99,25 +101,12 @@ void trusty_free(void *addr)
         free(addr);
 }
 
-void *trusty_membuf_alloc(struct ns_mem_page_info *page_info, size_t size)
+void *trusty_alloc_pages(unsigned count)
 {
-    void *va = NULL;
-    int res;
-
-    va = memalign(4096, size);
-    if (!va)
-        return NULL;
-
-    /* get memory attibutes */
-    res = trusty_encode_page_info(page_info, va);
-    if (res) {
-        trusty_membuf_free(va);
-        return NULL;
-    }
-    return va;
+    return memalign(PAGE_SIZE, count * PAGE_SIZE);
 }
 
-void trusty_membuf_free(void *va)
+void trusty_free_pages(void *va, unsigned count)
 {
     if (va)
         free(va);

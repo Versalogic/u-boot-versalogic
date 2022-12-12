@@ -1,19 +1,20 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright 2014 Google Inc.
- *
- * SPDX-License-Identifier:     GPL-2.0+
  *
  * Extracted from Chromium coreboot commit 3f59b13d
  */
 
 #include <common.h>
+#include <bootstage.h>
 #include <dm.h>
 #include <edid.h>
 #include <errno.h>
 #include <display.h>
 #include <edid.h>
-#include <fdtdec.h>
 #include <lcd.h>
+#include <log.h>
+#include <part.h>
 #include <video.h>
 #include <asm/gpio.h>
 #include <asm/io.h>
@@ -21,9 +22,8 @@
 #include <asm/arch/pwm.h>
 #include <asm/arch-tegra/dc.h>
 #include <dm/uclass-internal.h>
+#include <linux/delay.h>
 #include "displayport.h"
-
-DECLARE_GLOBAL_DATA_PTR;
 
 /* return in 1000ths of a Hertz */
 static int tegra_dc_calc_refresh(const struct display_timing *timing)
@@ -334,7 +334,6 @@ static int display_init(struct udevice *dev, void *lcdbase,
 {
 	struct display_plat *disp_uc_plat;
 	struct dc_ctlr *dc_ctlr;
-	const void *blob = gd->fdt_blob;
 	struct udevice *dp_dev;
 	const int href_to_sync = 1, vref_to_sync = 1;
 	int panel_bpp = 18;	/* default 18 bits per pixel */
@@ -352,7 +351,7 @@ static int display_init(struct udevice *dev, void *lcdbase,
 		return ret;
 	}
 
-	disp_uc_plat = dev_get_uclass_platdata(dp_dev);
+	disp_uc_plat = dev_get_uclass_plat(dp_dev);
 	debug("Found device '%s', disp_uc_priv=%p\n", dp_dev->name,
 	      disp_uc_plat);
 	disp_uc_plat->src_dev = dev;
@@ -363,9 +362,8 @@ static int display_init(struct udevice *dev, void *lcdbase,
 		return ret;
 	}
 
-	dc_ctlr = (struct dc_ctlr *)fdtdec_get_addr(blob, dev_of_offset(dev),
-						    "reg");
-	if (fdtdec_decode_display_timing(blob, dev_of_offset(dev), 0, timing)) {
+	dc_ctlr = (struct dc_ctlr *)dev_read_addr(dev);
+	if (ofnode_decode_display_timing(dev_ofnode(dev), 0, timing)) {
 		debug("%s: Failed to decode display timing\n", __func__);
 		return -EINVAL;
 	}
@@ -416,6 +414,7 @@ static int display_init(struct udevice *dev, void *lcdbase,
 		debug("dc: failed to update window\n");
 		return ret;
 	}
+	debug("%s: ready\n", __func__);
 
 	return 0;
 }
@@ -466,12 +465,14 @@ static int tegra124_lcd_init(struct udevice *dev, void *lcdbase,
 
 static int tegra124_lcd_probe(struct udevice *dev)
 {
-	struct video_uc_platdata *plat = dev_get_uclass_platdata(dev);
+	struct video_uc_plat *plat = dev_get_uclass_plat(dev);
 	ulong start;
 	int ret;
 
 	start = get_timer(0);
+	bootstage_start(BOOTSTAGE_ID_ACCUM_LCD, "lcd");
 	ret = tegra124_lcd_init(dev, (void *)plat->base, VIDEO_BPP16);
+	bootstage_accum(BOOTSTAGE_ID_ACCUM_LCD);
 	debug("LCD init took %lu ms\n", get_timer(start));
 	if (ret)
 		printf("%s: Error %d\n", __func__, ret);
@@ -481,7 +482,7 @@ static int tegra124_lcd_probe(struct udevice *dev)
 
 static int tegra124_lcd_bind(struct udevice *dev)
 {
-	struct video_uc_platdata *uc_plat = dev_get_uclass_platdata(dev);
+	struct video_uc_plat *uc_plat = dev_get_uclass_plat(dev);
 
 	uc_plat->size = LCD_MAX_WIDTH * LCD_MAX_HEIGHT *
 			(1 << VIDEO_BPP16) / 8;

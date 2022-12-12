@@ -1,32 +1,43 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Board init file for Dragonboard 410C
  *
  * (C) Copyright 2015 Mateusz Kulikowski <mateusz.kulikowski@gmail.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
+#include <cpu_func.h>
 #include <dm.h>
+#include <env.h>
+#include <init.h>
+#include <net.h>
 #include <usb.h>
+#include <asm/cache.h>
+#include <asm/global_data.h>
 #include <asm/gpio.h>
+#include <fdt_support.h>
+#include <asm/arch/dram.h>
+#include <asm/arch/misc.h>
+#include <linux/delay.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
 int dram_init(void)
 {
 	gd->ram_size = PHYS_SDRAM_1_SIZE;
+
 	return 0;
 }
 
-void dram_init_banksize(void)
+int dram_init_banksize(void)
 {
 	gd->bd->bi_dram[0].start = PHYS_SDRAM_1;
 	gd->bd->bi_dram[0].size = PHYS_SDRAM_1_SIZE;
+
+	return 0;
 }
 
-
-int board_prepare_usb(enum usb_init_type type)
+int board_usb_init(int index, enum usb_init_type init)
 {
 	static struct udevice *pmic_gpio;
 	static struct gpio_desc hub_reset, usb_sel;
@@ -51,8 +62,8 @@ int board_prepare_usb(enum usb_init_type type)
 			printf("Failed to find usb_hub_reset_pm dt node.\n");
 			return node;
 		}
-		ret = gpio_request_by_name_nodev(gd->fdt_blob, node, "gpios", 0,
-						 &hub_reset, 0);
+		ret = gpio_request_by_name_nodev(offset_to_ofnode(node),
+						 "gpios", 0, &hub_reset, 0);
 		if (ret < 0) {
 			printf("Failed to request usb_hub_reset_pm gpio.\n");
 			return ret;
@@ -67,15 +78,15 @@ int board_prepare_usb(enum usb_init_type type)
 			printf("Failed to find usb_sw_sel_pm dt node.\n");
 			return 0;
 		}
-		ret = gpio_request_by_name_nodev(gd->fdt_blob, node, "gpios", 0,
-						 &usb_sel, 0);
+		ret = gpio_request_by_name_nodev(offset_to_ofnode(node),
+						 "gpios", 0, &usb_sel, 0);
 		if (ret < 0) {
 			printf("Failed to request usb_sw_sel_pm gpio.\n");
 			return ret;
 		}
 	}
 
-	if (type == USB_INIT_HOST) {
+	if (init == USB_INIT_HOST) {
 		/* Start USB Hub */
 		dm_gpio_set_dir_flags(&hub_reset,
 				      GPIOD_IS_OUT | GPIOD_IS_OUT_ACTIVE);
@@ -91,11 +102,6 @@ int board_prepare_usb(enum usb_init_type type)
 		dm_gpio_set_dir_flags(&usb_sel, GPIOD_IS_OUT);
 	}
 
-	return 0;
-}
-
-int board_init(void)
-{
 	return 0;
 }
 
@@ -119,16 +125,71 @@ int misc_init_r(void)
 		return 0;
 	}
 
-	if (gpio_request_by_name_nodev(gd->fdt_blob, node, "gpios", 0, &resin,
-				       0)) {
+	if (gpio_request_by_name_nodev(offset_to_ofnode(node), "gpios", 0,
+				       &resin, 0)) {
 		printf("Failed to request key_vol_down button.\n");
 		return 0;
 	}
 
 	if (dm_gpio_get_value(&resin)) {
-		setenv("bootdelay", "-1");
-		printf("Power button pressed - dropping to console.\n");
+		env_set("preboot", "setenv preboot; fastboot 0");
+		printf("key_vol_down pressed - Starting fastboot.\n");
 	}
 
 	return 0;
+}
+
+int board_init(void)
+{
+	return 0;
+}
+
+int board_late_init(void)
+{
+	char serial[16];
+
+	memset(serial, 0, 16);
+	snprintf(serial, 13, "%x", msm_board_serial());
+	env_set("serial#", serial);
+	return 0;
+}
+
+/* Fixup of DTB for Linux Kernel
+ * 1. Fixup installed DRAM.
+ * 2. Fixup WLAN/BT Mac address:
+ *	First, check if MAC addresses for WLAN/BT exists as environemnt
+ *	variables wlanaddr,btaddr. if not, generate a unique address.
+ */
+
+int ft_board_setup(void *blob, struct bd_info *bd)
+{
+	u8 mac[ARP_HLEN];
+
+	msm_fixup_memory(blob);
+
+	if (!eth_env_get_enetaddr("wlanaddr", mac)) {
+		msm_generate_mac_addr(mac);
+	};
+
+	do_fixup_by_compat(blob, "qcom,wcnss-wlan",
+			   "local-mac-address", mac, ARP_HLEN, 1);
+
+
+	if (!eth_env_get_enetaddr("btaddr", mac)) {
+		msm_generate_mac_addr(mac);
+
+/* The BD address is same as WLAN MAC address but with
+ * least significant bit flipped.
+ */
+		mac[0] ^= 0x01;
+	};
+
+	do_fixup_by_compat(blob, "qcom,wcnss-bt",
+			   "local-bd-address", mac, ARP_HLEN, 1);
+	return 0;
+}
+
+void reset_cpu(void)
+{
+	psci_system_reset();
 }

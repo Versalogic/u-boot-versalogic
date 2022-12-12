@@ -1,17 +1,27 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * (C) Copyright 2002-2010
  * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef	__ASM_GBL_DATA_H
 #define __ASM_GBL_DATA_H
 
+#ifndef __ASSEMBLY__
+
+#include <config.h>
+
+#include <asm/types.h>
+#include <linux/types.h>
+
 /* Architecture-specific global data */
 struct arch_global_data {
-#if defined(CONFIG_FSL_ESDHC)
+#if defined(CONFIG_FSL_ESDHC) || defined(CONFIG_FSL_ESDHC_IMX)
 	u32 sdhc_clk;
+#endif
+
+#if defined(CONFIG_FSL_ESDHC)
+	u32 sdhc_per_clk;
 #endif
 
 #if defined(CONFIG_U_QE)
@@ -32,11 +42,11 @@ struct arch_global_data {
 #endif
 	/* "static data" needed by most of timer.c on ARM platforms */
 	unsigned long timer_rate_hz;
-	unsigned long tbu;
-	unsigned long tbl;
+	unsigned int tbu;
+	unsigned int tbl;
 	unsigned long lastinc;
 	unsigned long long timer_reset_value;
-#if !(defined(CONFIG_SYS_ICACHE_OFF) && defined(CONFIG_SYS_DCACHE_OFF))
+#if !(CONFIG_IS_ENABLED(SYS_ICACHE_OFF) && CONFIG_IS_ENABLED(SYS_DCACHE_OFF))
 	unsigned long tlb_addr;
 	unsigned long tlb_size;
 #if defined(CONFIG_ARM64)
@@ -59,8 +69,15 @@ struct arch_global_data {
 	phys_addr_t secure_ram;
 	unsigned long tlb_allocated;
 #endif
+#ifdef CONFIG_RESV_RAM
+	/*
+	 * Reserved RAM for memory resident, eg. Management Complex (MC)
+	 * driver which continues to run after U-Boot exits.
+	 */
+	phys_addr_t resv_ram;
+#endif
 
-#ifdef CONFIG_ARCH_OMAP2
+#ifdef CONFIG_ARCH_OMAP2PLUS
 	u32 omap_boot_device;
 	u32 omap_boot_mode;
 	u8 omap_ch_flags;
@@ -69,14 +86,19 @@ struct arch_global_data {
 	unsigned long mem2_clk;
 #endif
 
-#ifdef CONFIG_HAVE_SC_FIRMWARE
-	uint64_t ipc_channel_handle;
+#ifdef CONFIG_ARCH_IMX8
+	struct udevice *scu_dev;
 #endif
+
+#ifdef CONFIG_ARCH_IMX8ULP
+	struct udevice *s400_dev;
+#endif
+
 };
 
 #include <asm-generic/global_data.h>
 
-#ifdef __clang__
+#if defined(__clang__) || defined(CONFIG_LTO)
 
 #define DECLARE_GLOBAL_DATA_PTR
 #define gd	get_gd()
@@ -86,10 +108,6 @@ static inline gd_t *get_gd(void)
 	gd_t *gd_ptr;
 
 #ifdef CONFIG_ARM64
-	/*
-	 * Make will already error that reserving x18 is not supported at the
-	 * time of writing, clang: error: unknown argument: '-ffixed-x18'
-	 */
 	__asm__ volatile("mov %0, x18\n" : "=r" (gd_ptr));
 #else
 	__asm__ volatile("mov %0, r9\n" : "=r" (gd_ptr));
@@ -106,5 +124,18 @@ static inline gd_t *get_gd(void)
 #define DECLARE_GLOBAL_DATA_PTR		register volatile gd_t *gd asm ("r9")
 #endif
 #endif
+
+static inline void set_gd(volatile gd_t *gd_ptr)
+{
+#ifdef CONFIG_ARM64
+	__asm__ volatile("ldr x18, %0\n" : : "m"(gd_ptr));
+#elif __ARM_ARCH >= 7
+	__asm__ volatile("ldr r9, %0\n" : : "m"(gd_ptr));
+#else
+	__asm__ volatile("mov r9, %0\n" : : "r"(gd_ptr));
+#endif
+}
+
+#endif /* __ASSEMBLY__ */
 
 #endif /* __ASM_GBL_DATA_H */

@@ -1,11 +1,10 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * (C) Copyright 2011 Logic Product Development <www.logicpd.com>
  *	Peter Barada <peter.barada@logicpd.com>
  *
  * Configuration settings for the Logic OMAP35x/DM37x SOM LV/Torpedo
  * reference boards.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef __CONFIG_H
@@ -13,82 +12,12 @@
 
 /* High Level Configuration Options */
 
-#define CONFIG_NR_DRAM_BANKS	2	/* CS1 may or may not be populated */
-
 #include <configs/ti_omap3_common.h>
 
-/*
- * We are only ever GP parts and will utilize all of the "downloaded image"
- * area in SRAM which starts at 0x40200000 and ends at 0x4020FFFF (64KB) in
- * order to allow for BCH8 to fit in.
- */
-#undef CONFIG_SPL_TEXT_BASE
-#define CONFIG_SPL_TEXT_BASE		0x40200000
-
-#define CONFIG_MISC_INIT_R		/* misc_init_r dumps the die id */
-#define CONFIG_CMDLINE_TAG		/* enable passing of ATAGs */
-#define CONFIG_SETUP_MEMORY_TAGS
-#define CONFIG_INITRD_TAG
-#define CONFIG_REVISION_TAG
-
-/* Hardware drivers */
-
-/* GPIO banks */
-#define CONFIG_OMAP3_GPIO_6		/* GPIO160..191 is in GPIO bank 6 */
-
-#define CONFIG_USB_OMAP3
-
-/* select serial console configuration */
-#undef CONFIG_CONS_INDEX
-#define CONFIG_CONS_INDEX		1
-#define CONFIG_SYS_NS16550_COM1		OMAP34XX_UART1
-#define CONFIG_SERIAL1			1	/* UART1 on OMAP Logic boards */
-
-/* commands to include */
-#define CONFIG_CMD_NAND
-#define CONFIG_CMD_MTDPARTS
-#define CONFIG_CMD_NAND_LOCK_UNLOCK	/* nand (un)lock commands	*/
-
-/* I2C */
-#define CONFIG_SYS_I2C_OMAP34XX
-#define CONFIG_SYS_I2C_EEPROM_ADDR	0x50	/* EEPROM AT24C64      */
-#define EXPANSION_EEPROM_I2C_BUS	2	/* I2C Bus for AT24C64 */
-#define CONFIG_OMAP3_LOGIC_USE_NEW_PRODUCT_ID
-
-/* USB */
-#define CONFIG_USB_MUSB_OMAP2PLUS
-#define CONFIG_USB_MUSB_PIO_ONLY
-#define CONFIG_USB_ETHER
-#define CONFIG_USB_ETHER_RNDIS
-#define CONFIG_USB_FUNCTION_FASTBOOT
-#define CONFIG_CMD_FASTBOOT
-#define CONFIG_ANDROID_BOOT_IMAGE
-#define CONFIG_FASTBOOT_BUF_ADDR	CONFIG_SYS_LOAD_ADDR
-#define CONFIG_FASTBOOT_BUF_SIZE	0x07000000
-
-/* TWL4030 */
-#define CONFIG_TWL4030_PWM
-#define CONFIG_TWL4030_USB
-
 /* Board NAND Info. */
-#ifdef CONFIG_NAND
-#define CONFIG_NAND_OMAP_GPMC
-
-#define CONFIG_CMD_UBIFS		/* Read-only UBI volume operations */
-#define CONFIG_RBTREE			/* required by CONFIG_CMD_UBI */
-#define CONFIG_LZO			/* required by CONFIG_CMD_UBIFS */
-
-#define CONFIG_SYS_NAND_ADDR		NAND_BASE /* physical address */
-						  /* to access nand */
+#ifdef CONFIG_MTD_RAW_NAND
 #define CONFIG_SYS_MAX_NAND_DEVICE	1	  /* Max number of */
 						  /* NAND devices */
-#define CONFIG_SYS_NAND_BUSWIDTH_16BIT
-#define CONFIG_SYS_NAND_5_ADDR_CYCLE
-#define CONFIG_SYS_NAND_PAGE_COUNT	64
-#define CONFIG_SYS_NAND_PAGE_SIZE	2048
-#define CONFIG_SYS_NAND_OOBSIZE		64
-#define CONFIG_SYS_NAND_BLOCK_SIZE	(128 * 1024)
-#define CONFIG_SYS_NAND_BAD_BLOCK_POS	NAND_LARGE_BADBLOCK_POS
 #define CONFIG_SYS_NAND_ECCPOS		{2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, \
 					 13, 14, 16, 17, 18, 19, 20, 21, 22, \
 					 23, 24, 25, 26, 27, 28, 30, 31, 32, \
@@ -98,35 +27,18 @@
 
 #define CONFIG_SYS_NAND_ECCSIZE		512
 #define CONFIG_SYS_NAND_ECCBYTES	13
-#define CONFIG_NAND_OMAP_ECCSCHEME	OMAP_ECC_BCH8_CODE_HW_DETECTION_SW
-#define CONFIG_BCH
 #define CONFIG_SYS_NAND_MAX_OOBFREE	2
 #define CONFIG_SYS_NAND_MAX_ECCPOS	56
-#define CONFIG_SYS_NAND_U_BOOT_OFFS	0x80000
-#define CONFIG_MTD_DEVICE		/* needed for mtdparts commands */
-#define CONFIG_MTD_PARTITIONS		/* required for UBI partition support */
-#define MTDIDS_DEFAULT			"nand0=omap2-nand.0"
-#define MTDPARTS_DEFAULT	"mtdparts=omap2-nand.0:"\
-							"512k(MLO),"\
-							"1792k(u-boot),"\
-							"128k(spl-os)," \
-							"128k(u-boot-env),"\
-							"6m(kernel),-(fs)"
 #endif
 
 /* Environment information */
 
-#define CONFIG_PREBOOT \
-	"setenv preboot;"						\
-	"nand unlock;"							\
-	"saveenv;"
-
 #define CONFIG_EXTRA_ENV_SETTINGS \
 	DEFAULT_LINUX_BOOT_ENV \
-	"mtdids=" MTDIDS_DEFAULT "\0"	\
-	"mtdparts=" MTDPARTS_DEFAULT "\0" \
+	"mtdids=" CONFIG_MTDIDS_DEFAULT "\0"	\
+	"mtdparts=" CONFIG_MTDPARTS_DEFAULT "\0" \
 	"mmcdev=0\0" \
-	"mmcroot=/dev/mmcblk0p2 rw\0" \
+	"finduuid=part uuid mmc ${mmcdev}:2 uuid\0" \
 	"mmcrootfstype=ext4 rootwait\0" \
 	"nandroot=ubi0:rootfs rw ubi.mtd=fs noinitrd\0" \
 	"nandrootfstype=ubifs rootwait\0" \
@@ -138,7 +50,7 @@
 			"fi; " \
 		"else run defaultboot; fi\0" \
 	"defaultboot=run mmcramboot\0" \
-	"consoledevice=ttyO0\0" \
+	"consoledevice=ttyS0\0" \
 	"setconsole=setenv console ${consoledevice},${baudrate}n8\0" \
 	"dump_bootargs=echo 'Bootargs: '; echo $bootargs\0" \
 	"rotation=0\0" \
@@ -165,7 +77,8 @@
 	"ramargs=setenv bootargs "\
 		"root=/dev/ram rw ramdisk_size=${ramdisksize}\0" \
 	"mmcargs=setenv bootargs "\
-		"root=${mmcroot} rootfstype=${mmcrootfstype}\0" \
+		"root=PARTUUID=${uuid} " \
+		"rootfstype=${mmcrootfstype} rw\0" \
 	"nandargs=setenv bootargs "\
 		"root=${nandroot} " \
 		"rootfstype=${nandrootfstype}\0" \
@@ -175,9 +88,11 @@
 		"ip=${ipaddr}:${tftpserver}:${gatewayip}:${netmask}::eth0:off\0" \
 	"nfsrootpath=/opt/nfs-exports/omap\0" \
 	"autoload=no\0" \
+	"fdtimage=" CONFIG_DEFAULT_DEVICE_TREE ".dtb\0" \
 	"loadfdt=mmc rescan; " \
 		"load mmc ${mmcdev} ${fdtaddr} ${fdtimage}\0" \
 	"mmcbootcommon=echo Booting with DT from mmc${mmcdev} ...; " \
+		"run finduuid; "\
 		"run mmcargs; " \
 		"run common_bootargs; " \
 		"run dump_bootargs; " \
@@ -198,10 +113,10 @@
 		"run loadramdisk\0" \
 	"mmcramboot=setenv bootfile uImage; " \
 		"run mmcrambootcommon; " \
-		"bootm ${loadaddr} ${rdaddr} ${fdtimage}\0" \
+		"bootm ${loadaddr} ${rdaddr} ${fdtaddr}\0" \
 	"mmcrambootz=setenv bootfile zImage; " \
 		"run mmcrambootcommon; " \
-		"bootz ${loadaddr} ${rdaddr} ${fdtimage}\0" \
+		"bootz ${loadaddr} ${rdaddr} ${fdtaddr}\0" \
 	"tftpboot=echo 'Booting kernel/ramdisk rootfs from tftp...'; " \
 		"run ramargs; " \
 		"run common_bootargs; " \
@@ -217,7 +132,6 @@
 		"tftpboot $loadaddr zImage;" \
 		"bootz $loadaddr\0" \
 	"nandbootcommon=echo 'Booting kernel from NAND...';" \
-		"nand unlock;" \
 		"run nandargs;" \
 		"run common_bootargs;" \
 		"run dump_bootargs;" \
@@ -228,50 +142,31 @@
 	"nandboot=run nandbootcommon; "\
 		"bootm ${loadaddr} - ${fdtaddr}\0"\
 
-#define CONFIG_BOOTCOMMAND \
-	"run autoboot"
-
 /* Miscellaneous configurable options */
 
 /* memtest works on */
-#define CONFIG_SYS_MEMTEST_START	(OMAP34XX_SDRC_CS0)
-#define CONFIG_SYS_MEMTEST_END		(OMAP34XX_SDRC_CS0 + \
-					0x01F00000) /* 31MB */
 
 /* FLASH and environment organization */
 
 /* **** PISMO SUPPORT *** */
 #if defined(CONFIG_CMD_NAND)
-#define CONFIG_SYS_FLASH_BASE		NAND_BASE
+#define CONFIG_SYS_FLASH_BASE		0x10000000
 #endif
+
+#define CONFIG_SYS_MAX_FLASH_SECT	256
+#define CONFIG_SYS_FLASH_CFI_WIDTH	FLASH_CFI_16BIT
+#define CONFIG_SYS_FLASH_SIZE		0x4000000
 
 /* Monitor at start of flash */
 #define CONFIG_SYS_MONITOR_BASE		CONFIG_SYS_FLASH_BASE
 
-#define CONFIG_ENV_IS_IN_NAND		1
-#define CONFIG_ENV_SIZE			(128 << 10)	/* 128 KiB */
-#define SMNAND_ENV_OFFSET		0x260000 /* environment starts here */
-
 #define CONFIG_SYS_ENV_SECT_SIZE	(128 << 10)	/* 128 KiB */
-#define CONFIG_ENV_OFFSET		SMNAND_ENV_OFFSET
-#define CONFIG_ENV_ADDR			SMNAND_ENV_OFFSET
-
-/* SMSC922x Ethernet */
-#if defined(CONFIG_CMD_NET)
-#define CONFIG_SMC911X
-#define CONFIG_SMC911X_32_BIT
-#define CONFIG_SMC911X_BASE	0x08000000
-#endif /* (CONFIG_CMD_NET) */
 
 /* Defines for SPL */
 
-#define CONFIG_SPL_OMAP3_ID_NAND
-
 /* NAND: SPL falcon mode configs */
 #ifdef CONFIG_SPL_OS_BOOT
-#define CONFIG_CMD_SPL_NAND_OFS		0x240000
 #define CONFIG_SYS_NAND_SPL_KERNEL_OFFS	0x280000
-#define CONFIG_CMD_SPL_WRITE_SIZE	0x2000
 #endif
 
 #endif /* __CONFIG_H */

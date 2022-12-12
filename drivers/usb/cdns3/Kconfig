@@ -9,14 +9,10 @@ config USB_CDNS3
 
 if USB_CDNS3
 
-config USB_CDNS3_GADGET_FORCE_HIGHSPEED
-    bool
-
 config USB_CDNS3_GADGET
 	bool "Cadence USB3 device controller"
 	depends on USB_GADGET
     select USB_GADGET_DUALSPEED
-    select USB_CDNS3_GADGET_FORCE_HIGHSPEED
 	help
 	  Say Y here to enable device controller functionality of the
 	  cadence usb3 driver.

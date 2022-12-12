@@ -1,21 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
- * (C) Copyright 2014-2016 Freescale Semiconductor, Inc.
+ * (C) Copyright 2014 Freescale Semiconductor, Inc.
  * Author: Nitin Garg <nitin.garg@freescale.com>
  *             Ye Li <Ye.Li@freescale.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <config.h>
 #include <common.h>
 #include <div64.h>
 #include <fuse.h>
+#include <log.h>
 #include <asm/io.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/sys_proto.h>
 #include <dm.h>
 #include <errno.h>
 #include <malloc.h>
+#include <linux/delay.h>
+#include <linux/math64.h>
 #include <thermal.h>
 #include <imx_thermal.h>
 
@@ -50,13 +52,14 @@ static int read_cpu_temperature(struct udevice *dev)
 {
 	int temperature;
 	unsigned int reg, n_meas;
-	const struct imx_thermal_plat *pdata = dev_get_platdata(dev);
+	const struct imx_thermal_plat *pdata = dev_get_plat(dev);
 	struct anatop_regs *anatop = (struct anatop_regs *)pdata->regs;
 	struct thermal_data *priv = dev_get_priv(dev);
 	u32 fuse = priv->fuse;
 	int t1, n1;
-	u64 c1, c2;
-	u64 temp64;
+	s64 c1, c2;
+	s64 temp64;
+	s32 rem;
 
 	/*
 	 * Sensor data layout:
@@ -73,7 +76,7 @@ static int read_cpu_temperature(struct udevice *dev)
 	 * slope = (FACTOR2 - FACTOR1 * n1) / FACTOR0
 	 * offset = 3.580661
 	 * offset = OFFSET / 1000000
-	 * (Nmeas - n1) / (Tmeas - t1) = slope
+	 * (Nmeas - n1) / (Tmeas - t1 - offset) = slope
 	 * We want to reduce this down to the minimum computation necessary
 	 * for each temperature read.  Also, we want Tmeas in millicelsius
 	 * and we don't want to lose precision from integer division. So...
@@ -83,12 +86,12 @@ static int read_cpu_temperature(struct udevice *dev)
 	 * Let constant c1 = (-1000000 / slope)
 	 * milli_Tmeas = (n1 - Nmeas) * c1 + 1000000 * t1 + OFFSET
 	 * Let constant c2 = n1 *c1 + 1000000 * t1
-	 * milli_Tmeas = (c2 - Nmeas * c1) / 1000000 + OFFSET
+	 * milli_Tmeas = (c2 - Nmeas * c1) + OFFSET
 	 * Tmeas = ((c2 - Nmeas * c1) + OFFSET) / 1000000
 	 */
 	temp64 = FACTOR0;
 	temp64 *= 1000000;
-	do_div(temp64, FACTOR1 * n1 - FACTOR2);
+	temp64 = div_s64_rem(temp64, FACTOR1 * n1 - FACTOR2, &rem);
 	c1 = temp64;
 	c2 = n1 * c1 + 1000000 * t1;
 
@@ -123,7 +126,7 @@ static int read_cpu_temperature(struct udevice *dev)
 	writel(TEMPSENSE0_FINISHED, &anatop->tempsense0_clr);
 
 	/* Tmeas = (c2 - Nmeas * c1 + OFFSET) / 1000000 */
-	temperature = lldiv(c2 - n_meas * c1 + OFFSET, 1000000);
+	temperature = div_s64_rem(c2 - n_meas * c1 + OFFSET, 1000000, &rem);
 
 	/* power down anatop thermal sensor */
 	writel(TEMPSENSE0_POWER_DOWN, &anatop->tempsense0_set);
@@ -234,7 +237,7 @@ static int imx_thermal_probe(struct udevice *dev)
 {
 	unsigned int fuse = ~0;
 
-	const struct imx_thermal_plat *pdata = dev_get_platdata(dev);
+	const struct imx_thermal_plat *pdata = dev_get_plat(dev);
 	struct thermal_data *priv = dev_get_priv(dev);
 
 	/* Read Temperature calibration data fuse */
@@ -271,6 +274,6 @@ U_BOOT_DRIVER(imx_thermal) = {
 	.id	= UCLASS_THERMAL,
 	.ops	= &imx_thermal_ops,
 	.probe	= imx_thermal_probe,
-	.priv_auto_alloc_size = sizeof(struct thermal_data),
+	.priv_auto	= sizeof(struct thermal_data),
 	.flags  = DM_FLAG_PRE_RELOC,
 };

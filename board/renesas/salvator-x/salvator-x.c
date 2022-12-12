@@ -1,99 +1,71 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * board/renesas/salvator-x/salvator-x.c
- *     This file is Salvator-X board support.
+ *     This file is Salvator-X/Salvator-XS board support.
  *
- * Copyright (C) 2015 Renesas Electronics Corporation
+ * Copyright (C) 2015-2017 Renesas Electronics Corporation
  * Copyright (C) 2015 Nobuhiro Iwamatsu <iwamatsu@nigauri.org>
- *
- * SPDX-License-Identifier: GPL-2.0+
  */
 
 #include <common.h>
+#include <cpu_func.h>
+#include <image.h>
+#include <init.h>
 #include <malloc.h>
 #include <netdev.h>
 #include <dm.h>
+#include <asm/global_data.h>
 #include <dm/platform_data/serial_sh.h>
 #include <asm/processor.h>
 #include <asm/mach-types.h>
 #include <asm/io.h>
+#include <linux/bitops.h>
 #include <linux/errno.h>
 #include <asm/arch/sys_proto.h>
 #include <asm/gpio.h>
 #include <asm/arch/gpio.h>
 #include <asm/arch/rmobile.h>
 #include <asm/arch/rcar-mstp.h>
+#include <asm/arch/sh_sdhi.h>
 #include <i2c.h>
 #include <mmc.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#define CPGWPCR	0xE6150904
-#define CPGWPR  0xE615090C
-
-#define CLK2MHZ(clk)	(clk / 1000 / 1000)
-void s_init(void)
-{
-	struct rcar_rwdt *rwdt = (struct rcar_rwdt *)RWDT_BASE;
-	struct rcar_swdt *swdt = (struct rcar_swdt *)SWDT_BASE;
-
-	/* Watchdog init */
-	writel(0xA5A5A500, &rwdt->rwtcsra);
-	writel(0xA5A5A500, &swdt->swtcsra);
-
-	writel(0xA5A50000, CPGWPCR);
-	writel(0xFFFFFFFF, CPGWPR);
-}
-
-#define GSX_MSTP112	(1 << 12)	/* 3DG */
-#define TMU0_MSTP125	(1 << 25)	/* secure */
-#define TMU1_MSTP124	(1 << 24)	/* non-secure */
-#define SCIF2_MSTP310	(1 << 10)	/* SCIF2 */
+#define DVFS_MSTP926		BIT(26)
+#define HSUSB_MSTP704		BIT(4)	/* HSUSB */
 
 int board_early_init_f(void)
 {
-	/* TMU0,1 */		/* which use ? */
-	mstp_clrbits_le32(MSTPSR1, SMSTPCR1, TMU0_MSTP125 | TMU1_MSTP124);
-	/* SCIF2 */
-	mstp_clrbits_le32(MSTPSR3, SMSTPCR3, SCIF2_MSTP310);
-
+#if CONFIG_IS_ENABLED(SYS_I2C_LEGACY) && defined(CONFIG_SYS_I2C_SH)
+	/* DVFS for reset */
+	mstp_clrbits_le32(SMSTPCR9, SMSTPCR9, DVFS_MSTP926);
+#endif
 	return 0;
 }
 
-/* SYSC */
-/* R/- 32 Power status register 2(3DG) */
-#define	SYSC_PWRSR2	0xE6180100
-/* -/W 32 Power resume control register 2 (3DG) */
-#define	SYSC_PWRONCR2	0xE618010C
+/* HSUSB block registers */
+#define HSUSB_REG_LPSTS			0xE6590102
+#define HSUSB_REG_LPSTS_SUSPM_NORMAL	BIT(14)
+#define HSUSB_REG_UGCTRL2		0xE6590184
+#define HSUSB_REG_UGCTRL2_USB0SEL	0x30
+#define HSUSB_REG_UGCTRL2_USB0SEL_EHCI	0x10
 
-DECLARE_GLOBAL_DATA_PTR;
 int board_init(void)
 {
-	/* adress of boot parameters */
-	gd->bd->bi_boot_params = CONFIG_SYS_TEXT_BASE + 0x50000;
+	/* USB1 pull-up */
+	setbits_le32(PFC_PUEN6, PUEN_USB1_OVC | PUEN_USB1_PWEN);
 
-	/* Init PFC controller */
-	r8a7795_pinmux_init();
-
-	/* GSX: force power and clock supply */
-	writel(0x0000001F, SYSC_PWRONCR2);
-	while (readl(SYSC_PWRSR2) != 0x000003E0)
-		mdelay(20);
-
-	mstp_clrbits_le32(MSTPSR1, SMSTPCR1, GSX_MSTP112);
+	/* Configure the HSUSB block */
+	mstp_clrbits_le32(SMSTPCR7, SMSTPCR7, HSUSB_MSTP704);
+	/* Choice USB0SEL */
+	clrsetbits_le32(HSUSB_REG_UGCTRL2, HSUSB_REG_UGCTRL2_USB0SEL,
+			HSUSB_REG_UGCTRL2_USB0SEL_EHCI);
+	/* low power status */
+	setbits_le16(HSUSB_REG_LPSTS, HSUSB_REG_LPSTS_SUSPM_NORMAL);
 
 	return 0;
 }
-
-int dram_init(void)
-{
-	gd->ram_size = CONFIG_SYS_SDRAM_SIZE;
-
-	return 0;
-}
-
-const struct rmobile_sysinfo sysinfo = {
-	CONFIG_RCAR_BOARD_STRING
-};
 
 #define RST_BASE	0xE6160000
 #define RST_CA57RESCNT	(RST_BASE + 0x40)
@@ -101,20 +73,34 @@ const struct rmobile_sysinfo sysinfo = {
 #define RST_RSTOUTCR	(RST_BASE + 0x58)
 #define RST_CODE	0xA5A5000F
 
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
+#if CONFIG_IS_ENABLED(SYS_I2C_LEGACY) && defined(CONFIG_SYS_I2C_SH)
+	i2c_reg_write(CONFIG_SYS_I2C_POWERIC_ADDR, 0x20, 0x80);
+#else
 	/* only CA57 ? */
 	writel(RST_CODE, RST_CA57RESCNT);
+#endif
 }
 
-static const struct sh_serial_platdata serial_platdata = {
-	.base = SCIF2_BASE,
-	.type = PORT_SCIF,
-	.clk = 14745600,		/* 0xE10000 */
-	.clk_mode = EXT_CLK,
-};
+#ifdef CONFIG_MULTI_DTB_FIT
+int board_fit_config_name_match(const char *name)
+{
+	/* PRR driver is not available yet */
+	u32 cpu_type = rmobile_get_cpu_type();
 
-U_BOOT_DEVICE(salvator_x_scif2) = {
-	.name = "serial_sh",
-	.platdata = &serial_platdata,
-};
+	if ((cpu_type == RMOBILE_CPU_TYPE_R8A7795) &&
+	    !strcmp(name, "r8a77950-salvator-x-u-boot"))
+		return 0;
+
+	if ((cpu_type == RMOBILE_CPU_TYPE_R8A7796) &&
+	    !strcmp(name, "r8a77960-salvator-x-u-boot"))
+		return 0;
+
+	if ((cpu_type == RMOBILE_CPU_TYPE_R8A77965) &&
+	    !strcmp(name, "r8a77965-salvator-x-u-boot"))
+		return 0;
+
+	return -1;
+}
+#endif

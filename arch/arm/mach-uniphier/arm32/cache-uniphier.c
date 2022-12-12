@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2012-2014 Panasonic Corporation
  * Copyright (C) 2015-2016 Socionext Inc.
  *   Author: Masahiro Yamada <yamada.masahiro@socionext.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
-#include <common.h>
+#include <cpu_func.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <asm/armv7.h>
@@ -197,9 +196,6 @@ void uniphier_cache_set_active_ways(int cpu, u32 active_ways)
 	void __iomem *base = (void __iomem *)UNIPHIER_SSCC + 0xc00;
 
 	switch (readl(UNIPHIER_SSCID)) { /* revision */
-	case 0x11:	/* sLD3 */
-		base = (void __iomem *)UNIPHIER_SSCC + 0x870;
-		break;
 	case 0x12:	/* LD4 */
 	case 0x16:	/* sld8 */
 		base = (void __iomem *)UNIPHIER_SSCC + 0x840;

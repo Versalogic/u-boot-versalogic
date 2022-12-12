@@ -15,6 +15,7 @@
  */
 
 #include <common.h>
+#include <log.h>
 #include <linux/compat.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/onenand.h>
@@ -160,9 +161,8 @@ static int onenand_isbad_bbt(struct mtd_info *mtd, loff_t offs, int allowbbt)
 	block = (int) (onenand_block(this, offs) << 1);
 	res = (bbm->bbt[block >> 3] >> (block & 0x06)) & 0x03;
 
-	MTDDEBUG (MTD_DEBUG_LEVEL2,
-		"onenand_isbad_bbt: bbt info for offs 0x%08x: (block %d) 0x%02x\n",
-		(unsigned int)offs, block >> 1, res);
+	pr_debug("onenand_isbad_bbt: bbt info for offs 0x%08x: (block %d) 0x%02x\n",
+		 (unsigned int)offs, block >> 1, res);
 
 	switch ((int)res) {
 	case 0x00:

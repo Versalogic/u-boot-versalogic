@@ -1,13 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2013 Samsung Electronics
  * Przemyslaw Marczak <p.marczak@samsung.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
+#include <command.h>
+#include <env.h>
 #include <lcd.h>
 #include <libtizen.h>
+#include <asm/global_data.h>
+#include <linux/delay.h>
 #include <samsung/misc.h>
 #include <errno.h>
 #include <version.h>
@@ -18,6 +21,19 @@
 #include <asm/gpio.h>
 #include <linux/input.h>
 #include <dm.h>
+/*
+ * Use #ifdef to work around conflicting headers while we wait for this to be
+ * converted to driver model.
+ */
+#ifdef CONFIG_DM_PMIC_MAX77686
+#include <power/max77686_pmic.h>
+#endif
+#ifdef CONFIG_DM_PMIC_MAX8998
+#include <power/max8998_pmic.h>
+#endif
+#ifdef CONFIG_PMIC_MAX8997
+#include <power/max8997_pmic.h>
+#endif
 #include <power/pmic.h>
 #include <mmc.h>
 
@@ -38,7 +54,7 @@ void set_dfu_alt_info(char *interface, char *devstr)
 
 	alt_setting = get_dfu_alt_boot(interface, devstr);
 	if (alt_setting) {
-		setenv("dfu_alt_boot", alt_setting);
+		env_set("dfu_alt_boot", alt_setting);
 		offset = snprintf(buf, buf_size, "%s", alt_setting);
 	}
 
@@ -58,7 +74,7 @@ void set_dfu_alt_info(char *interface, char *devstr)
 		status = "done\n";
 	}
 
-	setenv("dfu_alt_info", alt_info);
+	env_set("dfu_alt_info", alt_info);
 	puts(status);
 }
 #endif
@@ -70,14 +86,14 @@ void set_board_info(void)
 
 	snprintf(info, ARRAY_SIZE(info), "%u.%u", (s5p_cpu_rev & 0xf0) >> 4,
 		 s5p_cpu_rev & 0xf);
-	setenv("soc_rev", info);
+	env_set("soc_rev", info);
 
 	snprintf(info, ARRAY_SIZE(info), "%x", s5p_cpu_id);
-	setenv("soc_id", info);
+	env_set("soc_id", info);
 
 #ifdef CONFIG_REVISION_TAG
 	snprintf(info, ARRAY_SIZE(info), "%x", get_board_rev());
-	setenv("board_rev", info);
+	env_set("board_rev", info);
 #endif
 #ifdef CONFIG_OF_LIBFDT
 	const char *bdtype = "";
@@ -89,11 +105,11 @@ void set_board_info(void)
 		bdtype = "";
 
 	sprintf(info, "%s%s", bdname, bdtype);
-	setenv("boardname", info);
+	env_set("board_name", info);
 #endif
 	snprintf(info, ARRAY_SIZE(info),  "%s%x-%s%s.dtb",
 		 CONFIG_SYS_SOC, s5p_cpu_id, bdname, bdtype);
-	setenv("fdtfile", info);
+	env_set("fdtfile", info);
 #endif
 }
 #endif /* CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG */
@@ -101,32 +117,33 @@ void set_board_info(void)
 #ifdef CONFIG_LCD_MENU
 static int power_key_pressed(u32 reg)
 {
-#ifndef CONFIG_DM_I2C /* TODO(maintainer): Convert to driver model */
-	struct pmic *pmic;
+	struct udevice *dev;
+	int ret;
 	u32 status;
 	u32 mask;
 
-	pmic = pmic_get(KEY_PWR_PMIC_NAME);
-	if (!pmic) {
-		printf("%s: Not found\n", KEY_PWR_PMIC_NAME);
+	if (IS_ENABLED(CONFIG_TARGET_TRATS))
+		ret = pmic_get("max8997-pmic", &dev);
+	else if (IS_ENABLED(CONFIG_TARGET_TRATS2))
+		ret = pmic_get("max77686-pmic", &dev);
+	else if (IS_ENABLED(CONFIG_TARGET_S5PC210_UNIVERSAL))
+		ret = pmic_get("max8998-pmic", &dev);
+	else
 		return 0;
-	}
 
-	if (pmic_probe(pmic))
-		return 0;
+	if (ret)
+		return ret;
 
 	if (reg == KEY_PWR_STATUS_REG)
 		mask = KEY_PWR_STATUS_MASK;
 	else
 		mask = KEY_PWR_INTERRUPT_MASK;
 
-	if (pmic_reg_read(pmic, reg, &status))
-		return 0;
+	status = pmic_reg_read(dev, reg);
+	if (status < 0)
+		return status;
 
 	return !!(status & mask);
-#else
-	return 0;
-#endif
 }
 
 static int key_pressed(int key)
@@ -208,7 +225,7 @@ mode_cmd[BOOT_MODE_EXIT + 1] = {
 
 static void display_board_info(void)
 {
-#ifdef CONFIG_GENERIC_MMC
+#ifdef CONFIG_MMC
 	struct mmc *mmc = find_mmc_device(0);
 #endif
 	vidinfo_t *vid = &panel_info;
@@ -226,7 +243,7 @@ static void display_board_info(void)
 	lcd_printf("\tDRAM banks: %u\n", CONFIG_NR_DRAM_BANKS);
 	lcd_printf("\tDRAM size: %u MB\n", gd->ram_size / SZ_1M);
 
-#ifdef CONFIG_GENERIC_MMC
+#ifdef CONFIG_MMC
 	if (mmc) {
 		if (!mmc->capacity)
 			mmc_init(mmc);
@@ -248,7 +265,7 @@ static int mode_leave_menu(int mode)
 	char *exit_option;
 	char *exit_reset = "reset";
 	char *exit_back = "back";
-	cmd_tbl_t *cmd;
+	struct cmd_tbl *cmd;
 	int cmd_result;
 	int leave;
 
@@ -444,7 +461,7 @@ void draw_logo(void)
 
 	addr = panel_info.logo_addr;
 	if (!addr) {
-		error("There is no logo data.");
+		pr_err("There is no logo data.\n");
 		return;
 	}
 

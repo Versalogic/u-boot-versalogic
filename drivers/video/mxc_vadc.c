@@ -1,7 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright (C) 2014 Freescale Semiconductor, Inc. All Rights Reserved.
  *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
@@ -14,6 +14,7 @@
 
 #include <linux/string.h>
 #include <linux/list.h>
+#include <linux/delay.h>
 #include <gis.h>
 
 #include "mxc_vadc.h"

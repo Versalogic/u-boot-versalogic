@@ -27,11 +27,13 @@
 #include <trusty/avb.h>
 #include <trusty/keymaster.h>
 #include <trusty/sysdeps.h>
+#include <trusty/hwcrypto.h>
+#include <trusty/imx_snvs.h>
 
 /*
  * Initialize TIPC library
  */
-void trusty_ipc_init(void);
+int trusty_ipc_init(void);
 /*
  * Shutdown TIPC library
  */

@@ -1,11 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Take drivers/gpio/gpio-74x164.c as reference.
  *
  * 74Hx164 - Generic serial-in/parallel-out 8-bits shift register GPIO driver
  *
  * Copyright (C) 2016 Peng Fan <van.freenix@gmail.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  *
  */
 
@@ -14,8 +13,10 @@
 #include <dm.h>
 #include <fdtdec.h>
 #include <malloc.h>
+#include <asm/global_data.h>
 #include <asm/gpio.h>
 #include <asm/io.h>
+#include <dm/device_compat.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <spi.h>
 
@@ -106,7 +107,7 @@ static int gen_74x164_get_function(struct udevice *dev, unsigned offset)
 }
 
 static int gen_74x164_xlate(struct udevice *dev, struct gpio_desc *desc,
-			    struct fdtdec_phandle_args *args)
+			    struct ofnode_phandle_args *args)
 {
 	desc->offset = args->args[0];
 	desc->flags = args->args[1] & GPIO_ACTIVE_LOW ? GPIOD_ACTIVE_LOW : 0;
@@ -187,6 +188,6 @@ U_BOOT_DRIVER(74x164) = {
 	.id		= UCLASS_GPIO,
 	.ops		= &gen_74x164_ops,
 	.probe		= gen_74x164_probe,
-	.priv_auto_alloc_size = sizeof(struct gen_74x164_priv),
+	.priv_auto	= sizeof(struct gen_74x164_priv),
 	.of_match	= gen_74x164_ids,
 };

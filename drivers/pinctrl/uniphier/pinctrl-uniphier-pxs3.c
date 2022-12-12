@@ -1,11 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2017 Socionext Inc.
  *   Author: Masahiro Yamada <yamada.masahiro@socionext.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
-#include <dm/device.h>
+#include <common.h>
+#include <dm.h>
 #include <dm/pinctrl.h>
 
 #include "pinctrl-uniphier.h"
@@ -41,6 +41,10 @@ static const unsigned nand_pins[] = {16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
 static const int nand_muxvals[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static const unsigned sd_pins[] = {43, 44, 45, 46, 47, 48, 49, 50, 51};
 static const int sd_muxvals[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+static const unsigned spi0_pins[] = {100, 101, 102, 103};
+static const int spi0_muxvals[] = {0, 0, 0, 0};
+static const unsigned spi1_pins[] = {112, 113, 114, 115};
+static const int spi1_muxvals[] = {2, 2, 2, 2};
 static const unsigned system_bus_pins[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
 					   12, 13, 14};
 static const int system_bus_muxvals[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -77,12 +81,14 @@ static const struct uniphier_pinctrl_group uniphier_pxs3_groups[] = {
 	UNIPHIER_PINCTRL_GROUP(i2c3),
 	UNIPHIER_PINCTRL_GROUP(nand),
 	UNIPHIER_PINCTRL_GROUP(sd),
-	UNIPHIER_PINCTRL_GROUP_SPL(system_bus),
-	UNIPHIER_PINCTRL_GROUP_SPL(system_bus_cs1),
-	UNIPHIER_PINCTRL_GROUP_SPL(uart0),
-	UNIPHIER_PINCTRL_GROUP_SPL(uart1),
-	UNIPHIER_PINCTRL_GROUP_SPL(uart2),
-	UNIPHIER_PINCTRL_GROUP_SPL(uart3),
+	UNIPHIER_PINCTRL_GROUP(spi0),
+	UNIPHIER_PINCTRL_GROUP(spi1),
+	UNIPHIER_PINCTRL_GROUP(system_bus),
+	UNIPHIER_PINCTRL_GROUP(system_bus_cs1),
+	UNIPHIER_PINCTRL_GROUP(uart0),
+	UNIPHIER_PINCTRL_GROUP(uart1),
+	UNIPHIER_PINCTRL_GROUP(uart2),
+	UNIPHIER_PINCTRL_GROUP(uart3),
 	UNIPHIER_PINCTRL_GROUP(usb0),
 	UNIPHIER_PINCTRL_GROUP(usb1),
 	UNIPHIER_PINCTRL_GROUP(usb2),
@@ -101,11 +107,13 @@ static const char * const uniphier_pxs3_functions[] = {
 	UNIPHIER_PINMUX_FUNCTION(i2c3),
 	UNIPHIER_PINMUX_FUNCTION(nand),
 	UNIPHIER_PINMUX_FUNCTION(sd),
-	UNIPHIER_PINMUX_FUNCTION_SPL(system_bus),
-	UNIPHIER_PINMUX_FUNCTION_SPL(uart0),
-	UNIPHIER_PINMUX_FUNCTION_SPL(uart1),
-	UNIPHIER_PINMUX_FUNCTION_SPL(uart2),
-	UNIPHIER_PINMUX_FUNCTION_SPL(uart3),
+	UNIPHIER_PINMUX_FUNCTION(spi0),
+	UNIPHIER_PINMUX_FUNCTION(spi1),
+	UNIPHIER_PINMUX_FUNCTION(system_bus),
+	UNIPHIER_PINMUX_FUNCTION(uart0),
+	UNIPHIER_PINMUX_FUNCTION(uart1),
+	UNIPHIER_PINMUX_FUNCTION(uart2),
+	UNIPHIER_PINMUX_FUNCTION(uart3),
 	UNIPHIER_PINMUX_FUNCTION(usb0),
 	UNIPHIER_PINMUX_FUNCTION(usb1),
 	UNIPHIER_PINMUX_FUNCTION(usb2),
@@ -117,7 +125,8 @@ static struct uniphier_pinctrl_socdata uniphier_pxs3_pinctrl_socdata = {
 	.groups_count = ARRAY_SIZE(uniphier_pxs3_groups),
 	.functions = uniphier_pxs3_functions,
 	.functions_count = ARRAY_SIZE(uniphier_pxs3_functions),
-	.caps = UNIPHIER_PINCTRL_CAPS_PERPIN_IECTRL,
+	.caps = UNIPHIER_PINCTRL_CAPS_PUPD_SIMPLE |
+		UNIPHIER_PINCTRL_CAPS_PERPIN_IECTRL,
 };
 
 static int uniphier_pxs3_pinctrl_probe(struct udevice *dev)
@@ -135,6 +144,6 @@ U_BOOT_DRIVER(uniphier_pxs3_pinctrl) = {
 	.id = UCLASS_PINCTRL,
 	.of_match = of_match_ptr(uniphier_pxs3_pinctrl_match),
 	.probe = uniphier_pxs3_pinctrl_probe,
-	.priv_auto_alloc_size = sizeof(struct uniphier_pinctrl_priv),
+	.priv_auto	= sizeof(struct uniphier_pinctrl_priv),
 	.ops = &uniphier_pinctrl_ops,
 };

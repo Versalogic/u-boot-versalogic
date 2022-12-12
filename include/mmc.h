@@ -1,19 +1,29 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright 2008,2010 Freescale Semiconductor, Inc
  * Andy Fleming
  *
  * Based (loosely) on the Linux code
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef _MMC_H_
 #define _MMC_H_
 
+#include <linux/bitops.h>
 #include <linux/list.h>
 #include <linux/sizes.h>
 #include <linux/compiler.h>
+#include <linux/dma-direction.h>
 #include <part.h>
+
+struct bd_info;
+
+#if CONFIG_IS_ENABLED(MMC_HS200_SUPPORT)
+#define MMC_SUPPORTS_TUNING
+#endif
+#if CONFIG_IS_ENABLED(MMC_UHS_SUPPORT)
+#define MMC_SUPPORTS_TUNING
+#endif
 
 /* SD/MMC version bits; 8 flags, 8 major, 8 minor, 8 change */
 #define SD_VERSION_SD	(1U << 31)
@@ -47,6 +57,7 @@
 #define MMC_VERSION_4_1		MAKE_MMC_VERSION(4, 1, 0)
 #define MMC_VERSION_4_2		MAKE_MMC_VERSION(4, 2, 0)
 #define MMC_VERSION_4_3		MAKE_MMC_VERSION(4, 3, 0)
+#define MMC_VERSION_4_4		MAKE_MMC_VERSION(4, 4, 0)
 #define MMC_VERSION_4_41	MAKE_MMC_VERSION(4, 4, 1)
 #define MMC_VERSION_4_5		MAKE_MMC_VERSION(4, 5, 0)
 #define MMC_VERSION_5_0		MAKE_MMC_VERSION(5, 0, 0)
@@ -60,10 +71,14 @@
 #define MMC_MODE_HS400		MMC_CAP(MMC_HS_400)
 #define MMC_MODE_HS400_ES	MMC_CAP(MMC_HS_400_ES)
 
-#define MMC_MODE_8BIT		(1 << 30)
-#define MMC_MODE_4BIT		(1 << 29)
-#define MMC_MODE_1BIT		(1 << 28)
-#define MMC_MODE_SPI		(1 << 27)
+#define MMC_CAP_NONREMOVABLE	BIT(14)
+#define MMC_CAP_NEEDS_POLL	BIT(15)
+#define MMC_CAP_CD_ACTIVE_HIGH  BIT(16)
+
+#define MMC_MODE_8BIT		BIT(30)
+#define MMC_MODE_4BIT		BIT(29)
+#define MMC_MODE_1BIT		BIT(28)
+#define MMC_MODE_SPI		BIT(27)
 
 
 #define SD_DATA_4BIT	0x00040000
@@ -89,8 +104,8 @@
 #define MMC_CMD_SET_BLOCKLEN		16
 #define MMC_CMD_READ_SINGLE_BLOCK	17
 #define MMC_CMD_READ_MULTIPLE_BLOCK	18
-#define MMC_SEND_TUNING_BLOCK		19
-#define MMC_SEND_TUNING_BLOCK_HS200	21
+#define MMC_CMD_SEND_TUNING_BLOCK		19
+#define MMC_CMD_SEND_TUNING_BLOCK_HS200	21
 #define MMC_CMD_SET_BLOCK_COUNT         23
 #define MMC_CMD_WRITE_SINGLE_BLOCK	24
 #define MMC_CMD_WRITE_MULTIPLE_BLOCK	25
@@ -120,8 +135,8 @@
 
 static inline bool mmc_is_tuning_cmd(uint cmdidx)
 {
-	if ((cmdidx == MMC_SEND_TUNING_BLOCK_HS200) ||
-	    (cmdidx == MMC_SEND_TUNING_BLOCK))
+	if ((cmdidx == MMC_CMD_SEND_TUNING_BLOCK_HS200) ||
+	    (cmdidx == MMC_CMD_SEND_TUNING_BLOCK))
 		return true;
 	return false;
 }
@@ -137,11 +152,11 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define UHS_SDR104_BUS_SPEED	3
 #define UHS_DDR50_BUS_SPEED	4
 
-#define SD_MODE_UHS_SDR12	(1 << UHS_SDR12_BUS_SPEED)
-#define SD_MODE_UHS_SDR25	(1 << UHS_SDR25_BUS_SPEED)
-#define SD_MODE_UHS_SDR50	(1 << UHS_SDR50_BUS_SPEED)
-#define SD_MODE_UHS_SDR104	(1 << UHS_SDR104_BUS_SPEED)
-#define SD_MODE_UHS_DDR50	(1 << UHS_DDR50_BUS_SPEED)
+#define SD_MODE_UHS_SDR12	BIT(UHS_SDR12_BUS_SPEED)
+#define SD_MODE_UHS_SDR25	BIT(UHS_SDR25_BUS_SPEED)
+#define SD_MODE_UHS_SDR50	BIT(UHS_SDR50_BUS_SPEED)
+#define SD_MODE_UHS_SDR104	BIT(UHS_SDR104_BUS_SPEED)
+#define SD_MODE_UHS_DDR50	BIT(UHS_DDR50_BUS_SPEED)
 
 #define OCR_BUSY		0x80000000
 #define OCR_HCS			0x40000000
@@ -163,6 +178,7 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define MMC_STATUS_ERROR	(1 << 19)
 
 #define MMC_STATE_PRG		(7 << 9)
+#define MMC_STATE_TRANS		(4 << 9)
 
 #define MMC_VDD_165_195		0x00000080	/* VDD voltage 1.65 - 1.95 */
 #define MMC_VDD_20_21		0x00000100	/* VDD voltage 2.0 ~ 2.1 */
@@ -209,6 +225,9 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define EXT_CSD_WR_REL_PARAM		166	/* R */
 #define EXT_CSD_WR_REL_SET		167	/* R/W */
 #define EXT_CSD_RPMB_MULT		168	/* RO */
+#define EXT_CSD_USER_WP			171	/* R/W & R/W/C_P & R/W/E_P */
+#define EXT_CSD_BOOT_WP			173	/* R/W & R/W/C_P */
+#define EXT_CSD_BOOT_WP_STATUS		174	/* R */
 #define EXT_CSD_ERASE_GROUP_DEF		175	/* R/W */
 #define EXT_CSD_BOOT_BUS_WIDTH		177
 #define EXT_CSD_PART_CONF		179	/* R/W */
@@ -217,10 +236,12 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define EXT_CSD_HS_TIMING		185	/* R/W */
 #define EXT_CSD_REV			192	/* RO */
 #define EXT_CSD_CARD_TYPE		196	/* RO */
+#define EXT_CSD_PART_SWITCH_TIME	199	/* RO */
 #define EXT_CSD_SEC_CNT			212	/* RO, 4 bytes */
 #define EXT_CSD_HC_WP_GRP_SIZE		221	/* RO */
 #define EXT_CSD_HC_ERASE_GRP_SIZE	224	/* RO */
 #define EXT_CSD_BOOT_MULT		226	/* RO */
+#define EXT_CSD_GENERIC_CMD6_TIME       248     /* RO */
 #define EXT_CSD_BKOPS_SUPPORT		502	/* RO */
 
 /*
@@ -238,22 +259,24 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define EXT_CSD_CARD_TYPE_DDR_52	(EXT_CSD_CARD_TYPE_DDR_1_8V \
 					| EXT_CSD_CARD_TYPE_DDR_1_2V)
 
-#define EXT_CSD_CARD_TYPE_HS200_1_8V	(1<<4)	/* Card can run at 200MHz */
-#define EXT_CSD_CARD_TYPE_HS200_1_2V	(1<<5)	/* Card can run at 200MHz */
+#define EXT_CSD_CARD_TYPE_HS200_1_8V	BIT(4)	/* Card can run at 200MHz */
+						/* SDR mode @1.8V I/O */
+#define EXT_CSD_CARD_TYPE_HS200_1_2V	BIT(5)	/* Card can run at 200MHz */
 						/* SDR mode @1.2V I/O */
 #define EXT_CSD_CARD_TYPE_HS200		(EXT_CSD_CARD_TYPE_HS200_1_8V | \
 					 EXT_CSD_CARD_TYPE_HS200_1_2V)
-
-#define EXT_CSD_CARD_TYPE_HS400_1_8V	(1<<6)
-#define EXT_CSD_CARD_TYPE_HS400_1_2V	(1<<7)
+#define EXT_CSD_CARD_TYPE_HS400_1_8V	BIT(6)
+#define EXT_CSD_CARD_TYPE_HS400_1_2V	BIT(7)
 #define EXT_CSD_CARD_TYPE_HS400		(EXT_CSD_CARD_TYPE_HS400_1_8V | \
 					 EXT_CSD_CARD_TYPE_HS400_1_2V)
 
 #define EXT_CSD_BUS_WIDTH_1	0	/* Card is in 1 bit mode */
 #define EXT_CSD_BUS_WIDTH_4	1	/* Card is in 4 bit mode */
 #define EXT_CSD_BUS_WIDTH_8	2	/* Card is in 8 bit mode */
-#define EXT_CSD_DDR		4	/* Card is in DDR mode */
-#define EXT_CSD_BUS_WIDTH_STROBE (1 << 7) /* Enhanced strobe mode */
+#define EXT_CSD_DDR_BUS_WIDTH_4	5	/* Card is in 4 bit DDR mode */
+#define EXT_CSD_DDR_BUS_WIDTH_8	6	/* Card is in 8 bit DDR mode */
+#define EXT_CSD_DDR_FLAG	BIT(2)	/* Flag for DDR mode */
+#define EXT_CSD_BUS_WIDTH_STROBE BIT(7)	/* Enhanced strobe mode */
 
 #define EXT_CSD_TIMING_LEGACY	0	/* no high speed */
 #define EXT_CSD_TIMING_HS	1	/* HS */
@@ -269,6 +292,10 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define EXT_CSD_BOOT_ACK(x)		(x << 6)
 #define EXT_CSD_BOOT_PART_NUM(x)	(x << 3)
 #define EXT_CSD_PARTITION_ACCESS(x)	(x << 0)
+
+#define EXT_CSD_EXTRACT_BOOT_ACK(x)		(((x) >> 6) & 0x1)
+#define EXT_CSD_EXTRACT_BOOT_PART(x)		(((x) >> 3) & 0x7)
+#define EXT_CSD_EXTRACT_PARTITION_ACCESS(x)	((x) & 0x7)
 
 #define EXT_CSD_BOOT_BUS_WIDTH_MODE(x)	(x << 3)
 #define EXT_CSD_BOOT_BUS_WIDTH_RESET(x)	(x << 2)
@@ -310,9 +337,22 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
 #define ENHNCD_SUPPORT		(0x2)
 #define PART_ENH_ATTRIB		(0x1f)
 
-#define MMC_SIGNAL_VOLTAGE_330	1
-#define MMC_SIGNAL_VOLTAGE_180	2
-#define MMC_SIGNAL_VOLTAGE_120	3
+#define MMC_QUIRK_RETRY_SEND_CID	BIT(0)
+#define MMC_QUIRK_RETRY_SET_BLOCKLEN	BIT(1)
+#define MMC_QUIRK_RETRY_APP_CMD	BIT(2)
+
+#define BOOT1_PWR_WP   (0x83)
+
+enum mmc_voltage {
+	MMC_SIGNAL_VOLTAGE_000 = 0,
+	MMC_SIGNAL_VOLTAGE_120 = 1,
+	MMC_SIGNAL_VOLTAGE_180 = 2,
+	MMC_SIGNAL_VOLTAGE_330 = 4,
+};
+
+#define MMC_ALL_SIGNAL_VOLTAGE (MMC_SIGNAL_VOLTAGE_120 |\
+				MMC_SIGNAL_VOLTAGE_180 |\
+				MMC_SIGNAL_VOLTAGE_330)
 
 /* Maximum block size for MMC */
 #define MMC_MAX_BLOCK_LEN	512
@@ -322,6 +362,19 @@ static inline bool mmc_is_tuning_cmd(uint cmdidx)
  */
 #define MMC_NUM_BOOT_PARTITION	2
 #define MMC_PART_RPMB           3       /* RPMB partition number */
+
+/* timing specification used */
+#define MMC_TIMING_LEGACY	0
+#define MMC_TIMING_MMC_HS	1
+#define MMC_TIMING_SD_HS	2
+#define MMC_TIMING_UHS_SDR12	3
+#define MMC_TIMING_UHS_SDR25	4
+#define MMC_TIMING_UHS_SDR50	5
+#define MMC_TIMING_UHS_SDR104	6
+#define MMC_TIMING_UHS_DDR50	7
+#define MMC_TIMING_MMC_DDR52	8
+#define MMC_TIMING_MMC_HS200	9
+#define MMC_TIMING_MMC_HS400	10
 
 /* Driver model support */
 
@@ -339,9 +392,9 @@ struct mmc_uclass_priv {
  * will be available.
  *
  * @dev:	Device
- * @return associated mmc struct pointer if available, else NULL
+ * Return: associated mmc struct pointer if available, else NULL
  */
-struct mmc *mmc_get_mmc_dev(struct udevice *dev);
+struct mmc *mmc_get_mmc_dev(const struct udevice *dev);
 
 /* End of driver model support */
 
@@ -374,8 +427,24 @@ struct mmc_data {
 /* forward decl. */
 struct mmc;
 
-#ifdef CONFIG_DM_MMC_OPS
+#if CONFIG_IS_ENABLED(DM_MMC)
 struct dm_mmc_ops {
+	/**
+	 * deferred_probe() - Some configurations that need to be deferred
+	 * to just before enumerating the device
+	 *
+	 * @dev:	Device to init
+	 * @return 0 if Ok, -ve if error
+	 */
+	int (*deferred_probe)(struct udevice *dev);
+	/**
+	 * reinit() - Re-initialization to clear old configuration for
+	 * mmc rescan.
+	 *
+	 * @dev:	Device to reinit
+	 * @return 0 if Ok, -ve if error
+	 */
+	int (*reinit)(struct udevice *dev);
 	/**
 	 * send_cmd() - Send a command to the MMC device
 	 *
@@ -396,15 +465,6 @@ struct dm_mmc_ops {
 	int (*set_ios)(struct udevice *dev);
 
 	/**
-	 * set_vdd() - Enable or Disable the Vdd line
-	 *
-	 * @dev:	Device to update
-	 * @enable:	true or false to enable or disable Vdd respectively
-	 * @return 0 if OK, -ve on error
-	 */
-	int (*set_vdd)(struct udevice *dev, bool enable);
-
-	/**
 	 * get_cd() - See whether a card is present
 	 *
 	 * @dev:	Device to check
@@ -420,6 +480,7 @@ struct dm_mmc_ops {
 	 */
 	int (*get_wp)(struct udevice *dev);
 
+#ifdef MMC_SUPPORTS_TUNING
 	/**
 	 * execute_tuning() - Start the tuning process
 	 *
@@ -428,56 +489,91 @@ struct dm_mmc_ops {
 	 * @return 0 if OK, -ve on error
 	 */
 	int (*execute_tuning)(struct udevice *dev, uint opcode);
+#endif
 
 	/**
-	 * card_busy() - See whether a card is busy
+	 * wait_dat0() - wait until dat0 is in the target state
+	 *		(CLK must be running during the wait)
 	 *
 	 * @dev:	Device to check
-	 * @return 1 if busy, O if not busy
+	 * @state:	target state
+	 * @timeout_us:	timeout in us
+	 * @return 0 if dat0 is in the target state, -ve on error
 	 */
-	int (*card_busy)(struct udevice *dev);
+	int (*wait_dat0)(struct udevice *dev, int state, int timeout_us);
 
-	/* hs400_enhanced_strobe() - set enhanced strobe */
-	void (*hs400_enhanced_strobe)(struct udevice *dev);
+#if CONFIG_IS_ENABLED(MMC_HS400_ES_SUPPORT)
+	/* set_enhanced_strobe() - set HS400 enhanced strobe */
+	int (*set_enhanced_strobe)(struct udevice *dev);
+#endif
+
+	/**
+	 * host_power_cycle - host specific tasks in power cycle sequence
+	 *		      Called between mmc_power_off() and
+	 *		      mmc_power_on()
+	 *
+	 * @dev:	Device to check
+	 * @return 0 if not present, 1 if present, -ve on error
+	 */
+	int (*host_power_cycle)(struct udevice *dev);
+
+	/**
+	 * get_b_max - get maximum length of single transfer
+	 *	       Called before reading blocks from the card,
+	 *	       useful for system which have e.g. DMA limits
+	 *	       on various memory ranges.
+	 *
+	 * @dev:	Device to check
+	 * @dst:	Destination buffer in memory
+	 * @blkcnt:	Total number of blocks in this transfer
+	 * @return maximum number of blocks for this transfer
+	 */
+	int (*get_b_max)(struct udevice *dev, void *dst, lbaint_t blkcnt);
+
+	/**
+	 * hs400_prepare_ddr - prepare to switch to DDR mode
+	 *
+	 * @dev:	Device to check
+	 * @return 0 if success, -ve on error
+	 */
+	int (*hs400_prepare_ddr)(struct udevice *dev);
 };
 
 #define mmc_get_ops(dev)        ((struct dm_mmc_ops *)(dev)->driver->ops)
 
-int dm_mmc_send_cmd(struct udevice *dev, struct mmc_cmd *cmd,
-		    struct mmc_data *data);
-int dm_mmc_set_ios(struct udevice *dev);
-int dm_mmc_set_vdd(struct udevice *dev, bool enable);
-int dm_mmc_get_cd(struct udevice *dev);
-int dm_mmc_get_wp(struct udevice *dev);
-int dm_mmc_execute_tuning(struct udevice *dev, uint opcode);
-int dm_mmc_card_busy(struct udevice *dev);
-
 /* Transition functions for compatibility */
 int mmc_set_ios(struct mmc *mmc);
-int mmc_set_vdd(struct mmc *mmc, bool enable);
 int mmc_getcd(struct mmc *mmc);
 int mmc_getwp(struct mmc *mmc);
 int mmc_execute_tuning(struct mmc *mmc, uint opcode);
-int mmc_card_busy(struct mmc *mmc);
-
+int mmc_wait_dat0(struct mmc *mmc, int state, int timeout_us);
+int mmc_set_enhanced_strobe(struct mmc *mmc);
+int mmc_host_power_cycle(struct mmc *mmc);
+int mmc_deferred_probe(struct mmc *mmc);
+int mmc_reinit(struct mmc *mmc);
+int mmc_get_b_max(struct mmc *mmc, void *dst, lbaint_t blkcnt);
+int mmc_hs400_prepare_ddr(struct mmc *mmc);
 #else
 struct mmc_ops {
 	int (*send_cmd)(struct mmc *mmc,
 			struct mmc_cmd *cmd, struct mmc_data *data);
 	int (*set_ios)(struct mmc *mmc);
 	int (*init)(struct mmc *mmc);
-	int (*set_vdd)(struct mmc *mmc, bool enable);
 	int (*getcd)(struct mmc *mmc);
 	int (*getwp)(struct mmc *mmc);
-	int (*execute_tuning)(struct mmc *mmc, uint opcode);
-	int (*card_busy)(struct mmc *mmc);
-	void (*hs400_enhanced_strobe)(struct mmc *mmc);
+	int (*host_power_cycle)(struct mmc *mmc);
+	int (*get_b_max)(struct mmc *mmc, void *dst, lbaint_t blkcnt);
 };
+
+static inline int mmc_hs400_prepare_ddr(struct mmc *mmc)
+{
+	return 0;
+}
 #endif
 
 struct mmc_config {
 	const char *name;
-#ifndef CONFIG_DM_MMC_OPS
+#if !CONFIG_IS_ENABLED(DM_MMC)
 	const struct mmc_ops *ops;
 #endif
 	uint host_caps;
@@ -486,6 +582,9 @@ struct mmc_config {
 	uint f_max;
 	uint b_max;
 	unsigned char part_type;
+#ifdef CONFIG_MMC_PWRSEQ
+	struct udevice *pwr_dev;
+#endif
 };
 
 struct sd_ssr {
@@ -495,20 +594,19 @@ struct sd_ssr {
 };
 
 enum bus_mode {
-	MMC_LEGACY	= 0,
-	SD_LEGACY	= 1,
-	MMC_HS		= 2,
-	SD_HS		= 3,
-	UHS_SDR12	= 4,
-	UHS_SDR25	= 5,
-	UHS_SDR50	= 6,
-	UHS_SDR104	= 7,
-	UHS_DDR50	= 8,
-	MMC_HS_52	= 9,
-	MMC_DDR_52	= 10,
-	MMC_HS_200	= 11,
-	MMC_HS_400	= 12,
-	MMC_HS_400_ES	= 13,
+	MMC_LEGACY,
+	MMC_HS,
+	SD_HS,
+	MMC_HS_52,
+	MMC_DDR_52,
+	UHS_SDR12,
+	UHS_SDR25,
+	UHS_SDR50,
+	UHS_DDR50,
+	UHS_SDR104,
+	MMC_HS_200,
+	MMC_HS_400,
+	MMC_HS_400_ES,
 	MMC_MODES_END
 };
 
@@ -517,9 +615,20 @@ void mmc_dump_capabilities(const char *text, uint caps);
 
 static inline bool mmc_is_mode_ddr(enum bus_mode mode)
 {
-	if ((mode == MMC_HS_400) || (mode == MMC_HS_400_ES) || \
-	    (mode == MMC_DDR_52) || (mode == UHS_DDR50))
+	if (mode == MMC_DDR_52)
 		return true;
+#if CONFIG_IS_ENABLED(MMC_UHS_SUPPORT)
+	else if (mode == UHS_DDR50)
+		return true;
+#endif
+#if CONFIG_IS_ENABLED(MMC_HS400_SUPPORT)
+	else if (mode == MMC_HS_400)
+		return true;
+#endif
+#if CONFIG_IS_ENABLED(MMC_HS400_ES_SUPPORT)
+	else if (mode == MMC_HS_400_ES)
+		return true;
+#endif
 	else
 		return false;
 }
@@ -530,9 +639,12 @@ static inline bool mmc_is_mode_ddr(enum bus_mode mode)
 
 static inline bool supports_uhs(uint caps)
 {
+#if CONFIG_IS_ENABLED(MMC_UHS_SUPPORT)
 	return (caps & UHS_CAPS) ? true : false;
+#else
+	return false;
+#endif
 }
-
 
 /*
  * With CONFIG_DM_MMC enabled, struct mmc can be accessed from the MMC device
@@ -541,7 +653,7 @@ static inline bool supports_uhs(uint caps)
  * TODO struct mmc should be in mmc_private but it's hard to fix right now
  */
 struct mmc {
-#ifndef CONFIG_BLK
+#if !CONFIG_IS_ENABLED(BLK)
 	struct list_head link;
 #endif
 	const struct mmc_config *cfg;	/* provided configuration */
@@ -549,11 +661,13 @@ struct mmc {
 	void *priv;
 	uint has_init;
 	int high_capacity;
-	u8 clk_disable;
+	bool clk_disable; /* true if the clock can be turned off */
 	uint bus_width;
 	uint clock;
-	uint signal_voltage;
+	uint saved_clock;
+	enum mmc_voltage signal_voltage;
 	uint card_caps;
+	uint host_caps;
 	uint ocr;
 	uint dsr;
 	uint dsr_imp;
@@ -564,35 +678,65 @@ struct mmc {
 	u8 part_support;
 	u8 part_attr;
 	u8 wr_rel_set;
-	char part_config;
+	u8 part_config;
+	u8 gen_cmd6_time;	/* units: 10 ms */
+	u8 part_switch_time;	/* units: 10 ms */
 	uint tran_speed;
-	uint legacy_speed;
+	uint legacy_speed; /* speed for the legacy mode provided by the card */
 	uint read_bl_len;
+#if CONFIG_IS_ENABLED(MMC_WRITE)
 	uint write_bl_len;
 	uint erase_grp_size;	/* in 512-byte sectors */
+#endif
+#if CONFIG_IS_ENABLED(MMC_HW_PARTITIONING)
 	uint hc_wp_grp_size;	/* in 512-byte sectors */
+#endif
+#if CONFIG_IS_ENABLED(MMC_WRITE)
 	struct sd_ssr	ssr;	/* SD status register */
+#endif
 	u64 capacity;
 	u64 capacity_user;
 	u64 capacity_boot;
 	u64 capacity_rpmb;
 	u64 capacity_gp[4];
+#ifndef CONFIG_SPL_BUILD
 	u64 enh_user_start;
 	u64 enh_user_size;
-#ifndef CONFIG_BLK
+#endif
+#if !CONFIG_IS_ENABLED(BLK)
 	struct blk_desc block_dev;
 #endif
 	char op_cond_pending;	/* 1 if we are waiting on an op_cond command */
 	char init_in_progress;	/* 1 if we have done mmc_start_init() */
 	char preinit;		/* start init as early as possible */
 	int ddr_mode;
-#ifdef CONFIG_DM_MMC
+#if CONFIG_IS_ENABLED(DM_MMC)
 	struct udevice *dev;	/* Device for this MMC controller */
+#if CONFIG_IS_ENABLED(DM_REGULATOR)
+	struct udevice *vmmc_supply;	/* Main voltage regulator (Vcc)*/
+	struct udevice *vqmmc_supply;	/* IO voltage regulator (Vccq)*/
+#endif
 #endif
 	u8 *ext_csd;
-	enum bus_mode selected_mode;
-	enum bus_mode best_mode;
+	u32 cardtype;		/* cardtype read from the MMC */
+	enum mmc_voltage current_voltage;
+	enum bus_mode selected_mode; /* mode currently used */
+	enum bus_mode best_mode; /* best mode is the supported mode with the
+				  * highest bandwidth. It may not always be the
+				  * operating mode due to limitations when
+				  * accessing the boot partitions
+				  */
+	u32 quirks;
+	u8 hs400_tuning;
+
+	enum bus_mode user_speed_mode; /* input speed mode from user */
 };
+
+#if CONFIG_IS_ENABLED(DM_MMC)
+#define mmc_to_dev(_mmc)	_mmc->dev
+#else
+#define mmc_to_dev(_mmc)	NULL
+#endif
 
 struct mmc_hwpart_conf {
 	struct {
@@ -626,7 +770,7 @@ struct mmc *mmc_create(const struct mmc_config *cfg, void *priv);
  * @dev:	MMC device to set up
  * @mmc:	MMC struct
  * @cfg:	MMC configuration
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 int mmc_bind(struct udevice *dev, struct mmc *mmc,
 	     const struct mmc_config *cfg);
@@ -636,14 +780,58 @@ void mmc_destroy(struct mmc *mmc);
  * mmc_unbind() - Unbind a MMC device's child block device
  *
  * @dev:	MMC device
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 int mmc_unbind(struct udevice *dev);
-int mmc_initialize(bd_t *bis);
+int mmc_initialize(struct bd_info *bis);
+int mmc_init_device(int num);
 int mmc_init(struct mmc *mmc);
 int mmc_send_tuning(struct mmc *mmc, u32 opcode, int *cmd_error);
+int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd, struct mmc_data *data);
+int mmc_deinit(struct mmc *mmc);
+
+/**
+ * mmc_of_parse() - Parse the device tree to get the capabilities of the host
+ *
+ * @dev:	MMC device
+ * @cfg:	MMC configuration
+ * Return: 0 if OK, -ve on error
+ */
+int mmc_of_parse(struct udevice *dev, struct mmc_config *cfg);
+
+#ifdef CONFIG_MMC_PWRSEQ
+/**
+ * mmc_pwrseq_get_power() - get a power device from device tree
+ *
+ * @dev:	MMC device
+ * @cfg:	MMC configuration
+ * Return: 0 if OK, -ve on error
+ */
+int mmc_pwrseq_get_power(struct udevice *dev, struct mmc_config *cfg);
+#endif
+
 int mmc_read(struct mmc *mmc, u64 src, uchar *dst, int size);
-int mmc_set_clock(struct mmc *mmc, uint clock, u8 disable);
+
+/**
+ * mmc_voltage_to_mv() - Convert a mmc_voltage in mV
+ *
+ * @voltage:	The mmc_voltage to convert
+ * Return: the value in mV if OK, -EINVAL on error (invalid mmc_voltage value)
+ */
+int mmc_voltage_to_mv(enum mmc_voltage voltage);
+
+/**
+ * mmc_set_clock() - change the bus clock
+ * @mmc:	MMC struct
+ * @clock:	bus frequency in Hz
+ * @disable:	flag indicating if the clock must on or off
+ * Return: 0 if OK, -ve on error
+ */
+int mmc_set_clock(struct mmc *mmc, uint clock, bool disable);
+
+#define MMC_CLK_ENABLE		false
+#define MMC_CLK_DISABLE		true
+
 struct mmc *find_mmc_device(int dev_num);
 int mmc_set_dev(int dev_num);
 void print_mmc_devices(char separator);
@@ -651,14 +839,14 @@ void print_mmc_devices(char separator);
 /**
  * get_mmc_num() - get the total MMC device number
  *
- * @return 0 if there is no MMC device, else the number of devices
+ * Return: 0 if there is no MMC device, else the number of devices
  */
 int get_mmc_num(void);
 int mmc_switch_part(struct mmc *mmc, unsigned int part_num);
 int mmc_hwpart_config(struct mmc *mmc, const struct mmc_hwpart_conf *conf,
 		      enum mmc_hwpart_conf_mode mode);
 
-#ifndef CONFIG_DM_MMC_OPS
+#if !CONFIG_IS_ENABLED(DM_MMC)
 int mmc_getcd(struct mmc *mmc);
 int board_mmc_getcd(struct mmc *mmc);
 int mmc_getwp(struct mmc *mmc);
@@ -688,7 +876,7 @@ struct s_rpmb {
 	unsigned char mac[RPMB_SZ_MAC];
 	unsigned char data[RPMB_SZ_DATA];
 	unsigned char nonce[RPMB_SZ_NONCE];
-	unsigned long write_counter;
+	unsigned int write_counter;
 	unsigned short address;
 	unsigned short block_count;
 	unsigned short result;
@@ -700,13 +888,44 @@ int mmc_rpmb_read(struct mmc *mmc, void *addr, unsigned short blk,
 		  unsigned short cnt, unsigned char *key);
 int mmc_rpmb_write(struct mmc *mmc, void *addr, unsigned short blk,
 		   unsigned short cnt, unsigned char *key);
+
+/**
+ * mmc_rpmb_route_frames() - route RPMB data frames
+ * @mmc		Pointer to a MMC device struct
+ * @req		Request data frames
+ * @reqlen	Length of data frames in bytes
+ * @rsp		Supplied buffer for response data frames
+ * @rsplen	Length of supplied buffer for response data frames
+ *
+ * The RPMB data frames are routed to/from some external entity, for
+ * example a Trusted Exectuion Environment in an arm TrustZone protected
+ * secure world. It's expected that it's the external entity who is in
+ * control of the RPMB key.
+ *
+ * Returns 0 on success, < 0 on error.
+ */
+int mmc_rpmb_route_frames(struct mmc *mmc, void *req, unsigned long reqlen,
+			  void *rsp, unsigned long rsplen);
+
 int mmc_rpmb_request(struct mmc *mmc, const struct s_rpmb *s,
 			    unsigned int count, bool is_rel_write);
 int mmc_rpmb_response(struct mmc *mmc, struct s_rpmb *s,
 			     unsigned int count, unsigned short expected);
+
 #ifdef CONFIG_CMD_BKOPS_ENABLE
 int mmc_set_bkops_enable(struct mmc *mmc);
 #endif
+
+/**
+ * Start device initialization and return immediately; it does not block on
+ * polling OCR (operation condition register) status. Useful for checking
+ * the presence of SD/eMMC when no card detect logic is available.
+ *
+ * @param mmc	Pointer to a MMC device struct
+ * @param quiet	Be quiet, do not print error messages when card is not detected.
+ * Return: 0 on success, <0 on error.
+ */
+int mmc_get_op_cond(struct mmc *mmc, bool quiet);
 
 /**
  * Start device initialization and return immediately; it does not block on
@@ -715,7 +934,7 @@ int mmc_set_bkops_enable(struct mmc *mmc);
  * initializatin.
  *
  * @param mmc	Pointer to a MMC device struct
- * @return 0 on success, IN_PROGRESS on waiting for OCR status, <0 on error.
+ * Return: 0 on success, <0 on error.
  */
 int mmc_start_init(struct mmc *mmc);
 
@@ -738,26 +957,21 @@ void mmc_set_preinit(struct mmc *mmc, int preinit);
 #else
 #define mmc_host_is_spi(mmc)	0
 #endif
-struct mmc *mmc_spi_init(uint bus, uint cs, uint speed, uint mode);
+
+#define mmc_dev(x)	((x)->dev)
 
 void board_mmc_power_init(void);
-int board_mmc_init(bd_t *bis);
-int cpu_mmc_init(bd_t *bis);
+int board_mmc_init(struct bd_info *bis);
+int cpu_mmc_init(struct bd_info *bis);
 int mmc_get_env_addr(struct mmc *mmc, int copy, u32 *env_addr);
+# ifdef CONFIG_SYS_MMC_ENV_PART
+extern uint mmc_get_env_part(struct mmc *mmc);
+# endif
 int mmc_get_env_dev(void);
 int mmc_map_to_kernel_blk(int dev_no);
 
-struct pci_device_id;
-
-/**
- * pci_mmc_init() - set up PCI MMC devices
- *
- * This finds all the matching PCI IDs and sets them up as MMC devices.
- *
- * @name:		Name to use for devices
- * @mmc_supported:	PCI IDs to search for, terminated by {0, 0}
- */
-int pci_mmc_init(const char *name, struct pci_device_id *mmc_supported);
+/* Minimum partition switch timeout in units of 10-milliseconds */
+#define MMC_MIN_PART_SWITCH_TIME	30 /* 300 ms */
 
 /* Set block count limit because of 16 bit register limit on some hardware*/
 #ifndef CONFIG_SYS_MMC_MAX_BLK_COUNT
@@ -768,8 +982,33 @@ int pci_mmc_init(const char *name, struct pci_device_id *mmc_supported);
  * mmc_get_blk_desc() - Get the block descriptor for an MMC device
  *
  * @mmc:	MMC device
- * @return block device if found, else NULL
+ * Return: block device if found, else NULL
  */
 struct blk_desc *mmc_get_blk_desc(struct mmc *mmc);
+
+/**
+ * mmc_send_ext_csd() - read the extended CSD register
+ *
+ * @mmc:	MMC device
+ * @ext_csd	a cache aligned buffer of length MMC_MAX_BLOCK_LEN allocated by
+ *		the caller, e.g. using
+ *		ALLOC_CACHE_ALIGN_BUFFER(u8, ext_csd, MMC_MAX_BLOCK_LEN)
+ * Return:	0 for success
+ */
+int mmc_send_ext_csd(struct mmc *mmc, u8 *ext_csd);
+
+/**
+ * mmc_boot_wp() - power on write protect boot partitions
+ *
+ * The boot partitions are write protected until the next power cycle.
+ *
+ * Return:	0 for success
+ */
+int mmc_boot_wp(struct mmc *mmc);
+
+static inline enum dma_data_direction mmc_get_dma_dir(struct mmc_data *data)
+{
+	return data->flags & MMC_DATA_WRITE ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
+}
 
 #endif /* _MMC_H_ */

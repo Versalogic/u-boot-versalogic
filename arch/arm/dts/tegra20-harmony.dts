@@ -599,7 +599,7 @@
 		nvidia,sys-clock-req-active-high;
 	};
 
-	pcie-controller@80003000 {
+	pcie@80003000 {
 		status = "okay";
 
 		avdd-pex-supply = <&pci_vdd_reg>;
@@ -811,4 +811,8 @@
 			 <&tegra_car TEGRA20_CLK_CDEV1>;
 		clock-names = "pll_a", "pll_a_out0", "mclk";
 	};
+};
+
+&uartd {
+	status = "okay";
 };

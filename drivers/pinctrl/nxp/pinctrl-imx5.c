@@ -1,16 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0+
 
 /*
  * Copyright (C) 2016 Peng Fan <van.freenix@gmail.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
-#include <dm/device.h>
+#include <common.h>
+#include <dm.h>
 #include <dm/pinctrl.h>
 
 #include "pinctrl-imx.h"
 
-static struct imx_pinctrl_soc_info imx5_pinctrl_soc_info;
+static struct imx_pinctrl_soc_info imx5_pinctrl_soc_info __section(".data");
 
 static int imx5_pinctrl_probe(struct udevice *dev)
 {
@@ -38,7 +38,7 @@ U_BOOT_DRIVER(imx5_pinctrl) = {
 	.of_match = of_match_ptr(imx5_pinctrl_match),
 	.probe = imx5_pinctrl_probe,
 	.remove = imx_pinctrl_remove,
-	.priv_auto_alloc_size = sizeof(struct imx_pinctrl_priv),
+	.priv_auto	= sizeof(struct imx_pinctrl_priv),
 	.ops = &imx_pinctrl_ops,
 	.flags = DM_FLAG_PRE_RELOC,
 };

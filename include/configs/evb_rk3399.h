@@ -1,25 +1,21 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * (C) Copyright 2016 Rockchip Electronics Co., Ltd
- *
- * SPDX-License-Identifier:     GPL-2.0+
  */
 
 #ifndef __EVB_RK3399_H
 #define __EVB_RK3399_H
 
-#include <configs/rk3399_common.h>
+#define ROCKCHIP_DEVICE_SETTINGS \
+		"stdin=serial,usbkbd\0" \
+		"stdout=serial,vidconsole\0" \
+		"stderr=serial,vidconsole\0"
 
-#define CONFIG_ENV_IS_IN_MMC
-#define CONFIG_SYS_MMC_ENV_DEV 1
-/*
- * SPL @ 32k for ~36k
- * ENV @ 96k
- * u-boot @ 128K
- */
-#define CONFIG_ENV_OFFSET (96 * 1024)
+#include <configs/rk3399_common.h>
 
 #define SDRAM_BANK_SIZE			(2UL << 30)
 
-#define CONFIG_SYS_WHITE_ON_BLACK
+#define CONFIG_USB_OHCI_NEW
+#define CONFIG_SYS_USB_OHCI_MAX_ROOT_PORTS     2
 
 #endif

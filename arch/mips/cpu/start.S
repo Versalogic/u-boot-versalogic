@@ -1,9 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  *  Startup Code for MIPS32 CPU-core
  *
  *  Copyright (c) 2003	Wolfgang Denk <wd@denx.de>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <asm-offsets.h>
@@ -18,19 +17,10 @@
 #endif
 
 #ifdef CONFIG_32BIT
-# define MIPS_RELOC	3
 # define STATUS_SET	0
 #endif
 
 #ifdef CONFIG_64BIT
-# ifdef CONFIG_SYS_LITTLE_ENDIAN
-#  define MIPS64_R_INFO(ssym, r_type3, r_type2, r_type) \
-	(((r_type) << 24) | ((r_type2) << 16) | ((r_type3) << 8) | (ssym))
-# else
-#  define MIPS64_R_INFO(ssym, r_type3, r_type2, r_type) \
-	((r_type) | ((r_type2) << 8) | ((r_type3) << 16) | (ssym) << 24)
-# endif
-# define MIPS_RELOC	MIPS64_R_INFO(0x00, 0x00, 0x12, 0x03)
 # define STATUS_SET	ST0_KX
 #endif
 
@@ -60,8 +50,9 @@
 		sp, sp, GD_SIZE		# reserve space for gd
 	and	sp, sp, t0		# force 16 byte alignment
 	move	k0, sp			# save gd pointer
-#ifdef CONFIG_SYS_MALLOC_F_LEN
-	li	t2, CONFIG_SYS_MALLOC_F_LEN
+#if CONFIG_VAL(SYS_MALLOC_F_LEN) && \
+    !CONFIG_IS_ENABLED(INIT_STACK_WITHOUT_MALLOC_F)
+	li	t2, CONFIG_VAL(SYS_MALLOC_F_LEN)
 	PTR_SUBU \
 		sp, sp, t2		# reserve space for early malloc
 	and	sp, sp, t0		# force 16 byte alignment
@@ -72,38 +63,34 @@
 	move	t0, k0
 1:
 	PTR_S	zero, 0(t0)
+	PTR_ADDIU t0, PTRSIZE
 	blt	t0, t1, 1b
-	 PTR_ADDIU t0, PTRSIZE
+	 nop
 
-#ifdef CONFIG_SYS_MALLOC_F_LEN
+#if CONFIG_VAL(SYS_MALLOC_F_LEN) && \
+    !CONFIG_IS_ENABLED(INIT_STACK_WITHOUT_MALLOC_F)
 	PTR_S	sp, GD_MALLOC_BASE(k0)	# gd->malloc_base offset
 #endif
 	.endm
 
 ENTRY(_start)
-	/* U-Boot entry point */
+	/*
+	 * U-Boot entry point.
+	 * Do not add instructions to the branch delay slot! Some SoC's
+	 * like Octeon might patch the final U-Boot binary at this location
+	 * with additional boot headers.
+	 */
 	b	reset
-	 mtc0	zero, CP0_COUNT	# clear cp0 count for most accurate boot timing
+	 nop
 
-#if defined(CONFIG_SYS_XWAY_EBU_BOOTCFG)
+#if defined(CONFIG_MIPS_INSERT_BOOT_CONFIG)
 	/*
-	 * Almost all Lantiq XWAY SoC devices have an external bus unit (EBU) to
-	 * access external NOR flashes. If the board boots from NOR flash the
-	 * internal BootROM does a blind read at address 0xB0000010 to read the
-	 * initial configuration for that EBU in order to access the flash
-	 * device with correct parameters. This config option is board-specific.
+	 * Store some board-specific boot configuration. This is used by some
+	 * MIPS systems like Malta.
 	 */
 	.org 0x10
-	.word CONFIG_SYS_XWAY_EBU_BOOTCFG
-	.word 0x0
-#endif
-#if defined(CONFIG_MALTA)
-	/*
-	 * Linux expects the Board ID here.
-	 */
-	.org 0x10
-	.word 0x00000420	# 0x420 (Malta Board with CoreLV)
-	.word 0x00000000
+	.word CONFIG_MIPS_BOOT_CONFIG_WORD0
+	.word CONFIG_MIPS_BOOT_CONFIG_WORD1
 #endif
 
 #if defined(CONFIG_ROM_EXCEPTION_VECTORS)
@@ -141,6 +128,7 @@ ENTRY(_start)
 #endif
 
 reset:
+	mtc0	zero, CP0_COUNT	# clear cp0 count for most accurate boot timing
 #if __mips_isa_rev >= 6
 	mfc0	t0, CP0_CONFIG, 5
 	and	t0, t0, MIPS_CONF5_VP
@@ -151,8 +139,13 @@ reset:
 	 mfc0	t0, CP0_GLOBALNUMBER
 #endif
 
+#ifdef CONFIG_ARCH_BMIPS
+1:	mfc0	t0, CP0_DIAGNOSTIC, 3
+	and	t0, t0, (1 << 31)
+#else
 1:	mfc0	t0, CP0_EBASE
-	and	t0, t0, EBASE_CPUNUM
+	and	t0, t0, MIPS_EBASE_CPUNUM
+#endif
 
 	/* Hang if this isn't the first CPU in the system */
 2:	beqz	t0, 4f
@@ -208,25 +201,12 @@ wr_done:
 	/* Clear timer interrupt (CP0_COUNT cleared on branch to 'reset') */
 	mtc0	zero, CP0_COMPARE
 
-#ifndef CONFIG_SKIP_LOWLEVEL_INIT
-	mfc0	t0, CP0_CONFIG
-	and	t0, t0, MIPS_CONF_IMPL
-	or	t0, t0, CONF_CM_UNCACHED
-	mtc0	t0, CP0_CONFIG
-	ehb
-#endif
-
-	/*
-	 * Initialize $gp, force pointer sized alignment of bal instruction to
-	 * forbid the compiler to put nop's between bal and _gp. This is
-	 * required to keep _gp and ra aligned to 8 byte.
-	 */
-	.align	PTRLOG
-	bal	1f
+#ifdef CONFIG_MIPS_CACHE_DISABLE
+	/* Disable caches */
+	PTR_LA	t9, mips_cache_disable
+	jalr	t9
 	 nop
-	PTR	_gp
-1:
-	PTR_L	gp, 0(ra)
+#endif
 
 #ifdef CONFIG_MIPS_CM
 	PTR_LA	t9, mips_cm_map
@@ -235,23 +215,46 @@ wr_done:
 #endif
 
 #ifdef CONFIG_MIPS_INIT_STACK_IN_SRAM
-	/* Set up initial stack and global data */
-	setup_stack_gd
+#ifdef CONFIG_MIPS_SRAM_INIT
+	/* Initialize the SRAM first */
+	PTR_LA	t9, mips_sram_init
+	jalr	t9
+	 nop
 #endif
 
-#ifndef CONFIG_SKIP_LOWLEVEL_INIT
+	/* Set up initial stack and global data */
+	setup_stack_gd
+
+# ifdef CONFIG_DEBUG_UART
+	/* Earliest point to set up debug uart */
+	PTR_LA	t9, debug_uart_init
+	jalr	t9
+	 nop
+# endif
+#endif
+
+#if !CONFIG_IS_ENABLED(SKIP_LOWLEVEL_INIT)
 # ifdef CONFIG_SYS_MIPS_CACHE_INIT_RAM_LOAD
 	/* Initialize any external memory */
 	PTR_LA	t9, lowlevel_init
 	jalr	t9
 	 nop
 # endif
+#endif
 
+#ifdef CONFIG_MIPS_MACH_EARLY_INIT
+	bal	mips_mach_early_init
+	 nop
+#endif
+
+#ifdef CONFIG_MIPS_CACHE_SETUP
 	/* Initialize caches... */
 	PTR_LA	t9, mips_cache_reset
 	jalr	t9
 	 nop
+#endif
 
+#if !CONFIG_IS_ENABLED(SKIP_LOWLEVEL_INIT)
 # ifndef CONFIG_SYS_MIPS_CACHE_INIT_RAM_LOAD
 	/* Initialize any external memory */
 	PTR_LA	t9, lowlevel_init
@@ -263,6 +266,13 @@ wr_done:
 #ifndef CONFIG_MIPS_INIT_STACK_IN_SRAM
 	/* Set up initial stack and global data */
 	setup_stack_gd
+
+# ifdef CONFIG_DEBUG_UART
+	/* Earliest point to set up debug uart */
+	PTR_LA	t9, debug_uart_init
+	jalr	t9
+	 nop
+# endif
 #endif
 
 	move	a0, zero		# a0 <-- boot_flags = 0
@@ -272,121 +282,3 @@ wr_done:
 	 move	ra, zero
 
 	END(_start)
-
-/*
- * void relocate_code (addr_sp, gd, addr_moni)
- *
- * This "function" does not return, instead it continues in RAM
- * after relocating the monitor code.
- *
- * a0 = addr_sp
- * a1 = gd
- * a2 = destination address
- */
-ENTRY(relocate_code)
-	move	sp, a0			# set new stack pointer
-	move	fp, sp
-
-	move	s0, a1			# save gd in s0
-	move	s2, a2			# save destination address in s2
-
-	PTR_LI	t0, CONFIG_SYS_MONITOR_BASE
-	PTR_SUB	s1, s2, t0		# s1 <-- relocation offset
-
-	PTR_LA	t2, __image_copy_end
-	move	t1, a2
-
-	/*
-	 * t0 = source address
-	 * t1 = target address
-	 * t2 = source end address
-	 */
-1:
-	PTR_L	t3, 0(t0)
-	PTR_S	t3, 0(t1)
-	PTR_ADDU t0, PTRSIZE
-	blt	t0, t2, 1b
-	 PTR_ADDU t1, PTRSIZE
-
-	/*
-	 * Now we want to update GOT.
-	 *
-	 * GOT[0] is reserved. GOT[1] is also reserved for the dynamic object
-	 * generated by GNU ld. Skip these reserved entries from relocation.
-	 */
-	PTR_LA	t3, num_got_entries
-	PTR_LA	t8, _GLOBAL_OFFSET_TABLE_
-	PTR_ADD	t8, s1			# t8 now holds relocated _G_O_T_
-	PTR_ADDIU t8, t8, 2 * PTRSIZE	# skipping first two entries
-	PTR_LI	t2, 2
-1:
-	PTR_L	t1, 0(t8)
-	beqz	t1, 2f
-	 PTR_ADD t1, s1
-	PTR_S	t1, 0(t8)
-2:
-	PTR_ADDIU t2, 1
-	blt	t2, t3, 1b
-	 PTR_ADDIU t8, PTRSIZE
-
-	/* Update dynamic relocations */
-	PTR_LA	t1, __rel_dyn_start
-	PTR_LA	t2, __rel_dyn_end
-
-	b	2f			# skip first reserved entry
-	 PTR_ADDIU t1, 2 * PTRSIZE
-
-1:
-	lw	t8, -4(t1)		# t8 <-- relocation info
-
-	PTR_LI	t3, MIPS_RELOC
-	bne	t8, t3, 2f		# skip non-MIPS_RELOC entries
-	 nop
-
-	PTR_L	t3, -(2 * PTRSIZE)(t1)	# t3 <-- location to fix up in FLASH
-
-	PTR_L	t8, 0(t3)		# t8 <-- original pointer
-	PTR_ADD	t8, s1			# t8 <-- adjusted pointer
-
-	PTR_ADD	t3, s1			# t3 <-- location to fix up in RAM
-	PTR_S	t8, 0(t3)
-
-2:
-	blt	t1, t2, 1b
-	 PTR_ADDIU t1, 2 * PTRSIZE	# each rel.dyn entry is 2*PTRSIZE bytes
-
-	/*
-	 * Flush caches to ensure our newly modified instructions are visible
-	 * to the instruction cache. We're still running with the old GOT, so
-	 * apply the reloc offset to the start address.
-	 */
-	PTR_LA	a0, __text_start
-	PTR_LA	a1, __text_end
-	PTR_SUB	a1, a1, a0
-	PTR_LA	t9, flush_cache
-	jalr	t9
-	 PTR_ADD	a0, s1
-
-	PTR_ADD	gp, s1			# adjust gp
-
-	/*
-	 * Clear BSS
-	 *
-	 * GOT is now relocated. Thus __bss_start and __bss_end can be
-	 * accessed directly via $gp.
-	 */
-	PTR_LA	t1, __bss_start		# t1 <-- __bss_start
-	PTR_LA	t2, __bss_end		# t2 <-- __bss_end
-
-1:
-	PTR_S	zero, 0(t1)
-	blt	t1, t2, 1b
-	 PTR_ADDIU t1, PTRSIZE
-
-	move	a0, s0			# a0 <-- gd
-	move	a1, s2
-	PTR_LA	t9, board_init_r
-	jr	t9
-	 move	ra, zero
-
-	END(relocate_code)

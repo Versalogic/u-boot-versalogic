@@ -1,7 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2009-2014 Freescale Semiconductor, Inc. All Rights Reserved.
  *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 /*!
@@ -24,7 +24,7 @@
 #include <common.h>
 #include <linux/errno.h>
 #include <linux/types.h>
-#include <asm/imx-common/mxc_key_defs.h>
+#include <asm/mach-imx/mxc_key_defs.h>
 #include <malloc.h>
 
 /*

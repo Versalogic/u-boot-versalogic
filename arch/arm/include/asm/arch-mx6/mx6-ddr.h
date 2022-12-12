@@ -1,13 +1,12 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * Copyright (C) 2013 Boundary Devices Inc.
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 #ifndef __ASM_ARCH_MX6_DDR_H__
 #define __ASM_ARCH_MX6_DDR_H__
 
 #ifndef CONFIG_SPL_BUILD
-#ifdef CONFIG_MX6Q
+#if defined(CONFIG_MX6Q) || defined(CONFIG_MX6QP)
 #include "mx6q-ddr.h"
 #else
 #if defined(CONFIG_MX6DL) || defined(CONFIG_MX6S)
@@ -16,7 +15,7 @@
 #ifdef CONFIG_MX6SX
 #include "mx6sx-ddr.h"
 #else
-#ifdef CONFIG_MX6UL
+#if defined(CONFIG_MX6UL) || defined(CONFIG_MX6ULL)
 #include "mx6ul-ddr.h"
 #else
 #ifdef CONFIG_MX6SL
@@ -27,7 +26,7 @@
 #endif	/* CONFIG_MX6UL */
 #endif	/* CONFIG_MX6SX */
 #endif	/* CONFIG_MX6DL or CONFIG_MX6S */
-#endif	/* CONFIG_MX6Q */
+#endif	/* CONFIG_MX6Q or CONFIG_MX6QP */
 #else
 
 enum {
@@ -305,6 +304,25 @@ struct mx6dq_iomux_grp_regs {
 	u32 grp_b4ds;
 	u32 grp_b5ds;
 	u32 grp_b6ds;
+};
+
+/*
+ * NoC scheduler registers - only on IMX6DQP
+ */
+#define MX6DQP_NOC_SCHED_BASE	0x00bb0000
+struct mx6dqp_noc_sched_regs {
+	u32 coreid;
+	u32 revid;
+	u32 ddrconf;
+	u32 ddrtiming;
+	u32 ddrmode;
+	u32 rlat;
+	u32 res1[4];
+	u32 ipu1;
+	u32 ipu2;
+	u32 res2[2];
+	u32 activate;
+	u32 res3[16];
 };
 
 #define MX6SDL_IOM_DDR_BASE     0x020e0400

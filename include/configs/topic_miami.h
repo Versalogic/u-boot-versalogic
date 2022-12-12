@@ -1,75 +1,37 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
 /*
  * (C) Copyright 2014 Topic Embedded Products
  *
  * Configuration for Zynq Evaluation and Development Board - Miami
  * See zynq-common.h for Zynq common configs
- *
- * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef __CONFIG_TOPIC_MIAMI_H
 #define __CONFIG_TOPIC_MIAMI_H
 
-#define CONFIG_ZYNQ_PS_CLK_FREQ		33333333UL
-
-#define CONFIG_ZYNQ_I2C0
-#define CONFIG_ZYNQ_I2C1
 
 /* Speed up boot time by ignoring the environment which we never used */
-#define CONFIG_ENV_IS_NOWHERE
 
 #include "zynq-common.h"
 
 /* Fixup settings */
-#undef CONFIG_ENV_SIZE
-#define CONFIG_ENV_SIZE			0x8000
-#undef CONFIG_ENV_OFFSET
-#define CONFIG_ENV_OFFSET		0x80000
 
 /* SPL settings */
-#undef CONFIG_SPL_ETH_SUPPORT
-#undef CONFIG_SYS_SPI_U_BOOT_OFFS
-#define CONFIG_SYS_SPI_U_BOOT_OFFS	0x20000
+#undef CONFIG_SPL_ETH
 #undef CONFIG_SPL_MAX_FOOTPRINT
 #define CONFIG_SPL_MAX_FOOTPRINT	CONFIG_SYS_SPI_U_BOOT_OFFS
 #define CONFIG_SPL_FS_LOAD_PAYLOAD_NAME     "u-boot.img"
 
-/* sspi command isn't useful */
-#undef CONFIG_CMD_SPI
-
-/* No useful gpio */
-#undef CONFIG_ZYNQ_GPIO
-#undef CONFIG_CMD_GPIO
-
-/* No falcon support */
-#undef CONFIG_SPL_OS_BOOT
-#undef CONFIG_SPL_FPGA_SUPPORT
-
 /* FPGA commands that we don't use */
-#undef CONFIG_CMD_FPGA_LOADMK
-#undef CONFIG_CMD_FPGA_LOADP
-#undef CONFIG_CMD_FPGA_LOADBP
-#undef CONFIG_CMD_FPGA_LOADFS
 
 /* Extras */
-#define CONFIG_CMD_MEMTEST
-#undef CONFIG_SYS_MEMTEST_START
-#define CONFIG_SYS_MEMTEST_START	0
-#undef CONFIG_SYS_MEMTEST_END
-#define CONFIG_SYS_MEMTEST_END	0x18000000
 
 /* Faster flash, ours may run at 108 MHz */
-#undef CONFIG_SF_DEFAULT_SPEED
-#define CONFIG_SF_DEFAULT_SPEED	108000000
-#define CONFIG_SF_DEFAULT_MODE SPI_MODE_0
-#undef CONFIG_SF_DUAL_FLASH
-#define CONFIG_ENV_SPI_MAX_HZ CONFIG_SF_DEFAULT_SPEED
 #undef CONFIG_SPI_FLASH_WINBOND
-#undef CONFIG_SPI_FLASH_ISSI
 
 /* Setup proper boot sequences for Miami boards */
 
-#if defined(CONFIG_USB)
+#if defined(CONFIG_USB_HOST)
 # define EXTRA_ENV_USB \
 	"usbreset=i2c dev 1 && i2c mw 41 1 ff && i2c mw 41 3 fe && "\
 		"i2c mw 41 1 fe && i2c mw 41 1 ff\0" \
@@ -84,7 +46,6 @@
 			"${devicetree_addr}; " \
 	"fi\0"
   /* Note that addresses here should match the addresses in the env */
-# undef DFU_ALT_INFO
 # define DFU_ALT_INFO \
 	"dfu_alt_info=" \
 	"uImage ram 0x2080000 0x500000;" \
@@ -95,8 +56,6 @@
 #else
 # define EXTRA_ENV_USB
 #endif
-
-#undef CONFIG_PREBOOT
 
 #undef CONFIG_EXTRA_ENV_SETTINGS
 #define CONFIG_EXTRA_ENV_SETTINGS	\
@@ -134,16 +93,5 @@
 		"fi\0" \
 	EXTRA_ENV_USB \
 	DFU_ALT_INFO
-
-#undef CONFIG_BOOTCOMMAND
-#define CONFIG_BOOTCOMMAND	"if mmcinfo; then " \
-	"if fatload mmc 0 0x1900000 ${bootscript}; then source 0x1900000; " \
-	"fi; fi; run $modeboot"
-#undef CONFIG_DISPLAY_BOARDINFO
-
-/* Further tweaks to reduce image size */
-#undef CONFIG_CMD_BOOTZ
-#undef CONFIG_CMD_NET
-#undef CONFIG_CMD_AES
 
 #endif /* __CONFIG_TOPIC_MIAMI_H */

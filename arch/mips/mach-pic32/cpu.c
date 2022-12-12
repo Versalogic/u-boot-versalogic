@@ -1,13 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright (C) 2015
  * Purna Chandra Mandal <purna.mandal@microchip.com>
- *
- * SPDX-License-Identifier:	GPL-2.0+
  *
  */
 #include <common.h>
 #include <clk.h>
 #include <dm.h>
+#include <init.h>
+#include <malloc.h>
+#include <asm/global_data.h>
 #include <mach/pic32.h>
 #include <mach/ddr.h>
 #include <dt-bindings/clock/microchip,clock.h>
@@ -110,12 +112,14 @@ static void ddr2_pmd_ungate(void)
 }
 
 /* initialize the DDR2 Controller and DDR2 PHY */
-phys_size_t initdram(int board_type)
+int dram_init(void)
 {
 	ddr2_pmd_ungate();
 	ddr2_phy_init();
 	ddr2_ctrl_init();
-	return ddr2_calculate_size();
+	gd->ram_size = ddr2_calculate_size();
+
+	return 0;
 }
 
 int misc_init_r(void)
