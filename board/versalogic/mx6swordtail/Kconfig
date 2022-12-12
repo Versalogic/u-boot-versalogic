@@ -1,0 +1,12 @@
+if TARGET_MX6SWORDTAIL
+
+config SYS_BOARD
+	default "mx6swordtail"
+
+config SYS_VENDOR
+	default "versalogic"
+
+config SYS_CONFIG_NAME
+	default "mx6swordtail"
+
+endif

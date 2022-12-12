@@ -1,0 +1,18 @@
+/*
+ * Copyright (C) 2013-2015 Freescale Semiconductor, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+/dts-v1/;
+
+#include "imx6dl.dtsi"
+#include "imx6qdl-zebra.dtsi"
+
+/ {
+	model = "Freescale i.MX6 DualLite - Versalogic Zebra";
+	compatible = "fsl,imx6dl-zebra", "fsl,imx6dl";
+};
+

@@ -5,6 +5,7 @@
  */
 
 #define LOG_CATEGORY UCLASS_REGULATOR
+#define LOG_DEBUG
 
 #include <common.h>
 #include <errno.h>
@@ -488,7 +489,6 @@ int regulators_enable_boot_on(bool verbose)
 	struct udevice *dev;
 	struct uclass *uc;
 	int ret;
-
 	ret = uclass_get(UCLASS_REGULATOR, &uc);
 	if (ret)
 		return ret;

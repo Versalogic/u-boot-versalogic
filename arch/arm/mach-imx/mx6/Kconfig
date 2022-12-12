@@ -416,6 +416,29 @@ config TARGET_MX6SABRESD
 	select FSL_CAAM
 	select ARCH_MISC_INIT
 
+config TARGET_MX6TETRA
+        bool "mx6tetra"
+        select SUPPORT_SPL
+        select DM
+        select DM_THERMAL
+
+config TARGET_MX6ZEBRA
+        bool "mx6zebra"
+	select BOARD_EARLY_INIT_F
+	select BOARD_LATE_INIT
+        select SUPPORT_SPL
+        select DM
+        select DM_THERMAL
+	imply CMD_DM
+	select FSL_CAAM
+	select ARCH_MISC_INIT
+
+config TARGET_MX6SWORDTAIL
+        bool "mx6swordtail"
+        select SUPPORT_SPL
+        select DM
+        select DM_THERMAL
+
 config TARGET_MX6QSABREAUTO
     bool "mx6qsabreauto"
     select TARGET_MX6SABREAUTO_COMMON
@@ -888,5 +911,8 @@ source "board/wandboard/Kconfig"
 source "board/warp/Kconfig"
 source "board/BuR/brppt2/Kconfig"
 source "board/out4/o4-imx6ull-nano/Kconfig"
+source "board/versalogic/mx6tetra/Kconfig"
+source "board/versalogic/mx6zebra/Kconfig"
+source "board/versalogic/mx6swordtail/Kconfig"
 
 endif
