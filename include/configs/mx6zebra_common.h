@@ -195,12 +195,12 @@
 /* DMA stuff, needed for GPMI/MXS NAND support */
 #endif
 
-#if defined(CONFIG_ENV_IS_IN_SPI_FLASH)
-#define CONFIG_ENV_SPI_BUS             CONFIG_SF_DEFAULT_BUS
-#define CONFIG_ENV_SPI_CS              CONFIG_SF_DEFAULT_CS
-#define CONFIG_ENV_SPI_MODE            CONFIG_SF_DEFAULT_MODE
-#define CONFIG_ENV_SPI_MAX_HZ          CONFIG_SF_DEFAULT_SPEED
-#endif
+//#if defined(CONFIG_ENV_IS_IN_SPI_FLASH)
+//#define CONFIG_ENV_SPI_BUS             CONFIG_SF_DEFAULT_BUS
+//#define CONFIG_ENV_SPI_CS              CONFIG_SF_DEFAULT_CS
+//#define CONFIG_ENV_SPI_MODE            CONFIG_SF_DEFAULT_MODE
+//#define CONFIG_ENV_SPI_MAX_HZ          CONFIG_SF_DEFAULT_SPEED
+//#endif
 
 #if defined(CONFIG_ENV_IS_IN_SATA)
 #define CONFIG_SYS_SATA_ENV_DEV		0
