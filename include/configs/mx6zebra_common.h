@@ -159,6 +159,8 @@
 			"if test $fdt_file = undefined; then " \
 				"if test $board_name = ZEBRA && test $board_rev = MX6DL; then " \
 					"setenv fdt_file imx6dl-zebra.dtb; fi; " \
+				"if test $board_name = ZEBRA && test $board_rev = MX6S; then " \
+					"setenv fdt_file imx6dl-zebra.dtb; fi; " \
 				"if test $fdt_file = undefined; then " \
 					"echo WARNING: Could not determine dtb to use; fi; " \
 			"fi;\0" \
