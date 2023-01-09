@@ -418,9 +418,14 @@ config TARGET_MX6SABRESD
 
 config TARGET_MX6TETRA
         bool "mx6tetra"
-        select SUPPORT_SPL
-        select DM
-        select DM_THERMAL
+	select BOARD_EARLY_INIT_F
+	select BOARD_LATE_INIT
+	select SUPPORT_SPL
+	select DM
+	select DM_THERMAL
+	imply CMD_DM
+	select FSL_CAAM
+	select ARCH_MISC_INIT
 
 config TARGET_MX6ZEBRA
         bool "mx6zebra"
@@ -435,9 +440,14 @@ config TARGET_MX6ZEBRA
 
 config TARGET_MX6SWORDTAIL
         bool "mx6swordtail"
-        select SUPPORT_SPL
-        select DM
-        select DM_THERMAL
+	select BOARD_EARLY_INIT_F
+	select BOARD_LATE_INIT
+	select SUPPORT_SPL
+	select DM
+	select DM_THERMAL
+	imply CMD_DM
+	select FSL_CAAM
+	select ARCH_MISC_INIT
 
 config TARGET_MX6QSABREAUTO
     bool "mx6qsabreauto"

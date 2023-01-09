@@ -1178,7 +1178,7 @@ int board_late_init(void)
 #endif
 
 #ifdef CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG
-	env_set("board_name", "TETRA");
+	env_set("board_name", "ZEBRA");
 
 	if (is_mx6dqp())
 		env_set("board_rev", "MX6QP");
@@ -1339,13 +1339,13 @@ void board_init_f(ulong dummy)
 int board_fit_config_name_match(const char *name)
 {
 	if (is_mx6dq()) {
-		if (!strcmp(name, "imx6q-tetra"))
+		if (!strcmp(name, "imx6q-zebra"))
 			return 0;
 	} else if (is_mx6dqp()) {
-		if (!strcmp(name, "imx6qp-tetra"))
+		if (!strcmp(name, "imx6qp-zebra"))
 			return 0;
 	} else if (is_mx6dl()) {
-		if (!strcmp(name, "imx6dl-tetra"))
+		if (!strcmp(name, "imx6dl-zebra"))
 			return 0;
 	}
 
