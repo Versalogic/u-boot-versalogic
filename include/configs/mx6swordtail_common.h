@@ -3,11 +3,11 @@
  * Copyright (C) 2012 Freescale Semiconductor, Inc.
  * Copyright 2018 NXP
  *
- * Configuration settings for the Freescale i.MX6DL Zebra board.
+ * Configuration settings for the Freescale i.MX6DL/Q Swordtail board.
  */
 
-#ifndef __MX6DLZEBRA_COMMON_CONFIG_H
-#define __MX6DLZEBRA_COMMON_CONFIG_H
+#ifndef __MX6DLSWORDTAIL_COMMON_CONFIG_H
+#define __MX6DLSWORDTAIL_COMMON_CONFIG_H
 
 #include <linux/stringify.h>
 #include "mx6_common.h"
@@ -157,10 +157,10 @@
 		"fi;\0" \
 		"findfdt="\
 			"if test $fdt_file = undefined; then " \
-				"if test $board_name = ZEBRA && test $board_rev = MX6DL; then " \
-					"setenv fdt_file imx6dl-zebra.dtb; fi; " \
-				"if test $board_name = ZEBRA && test $board_rev = MX6S; then " \
-					"setenv fdt_file imx6dl-zebra.dtb; fi; " \
+				"if test $board_name = SWORDTAIL && test $board_rev = MX6DL; then " \
+					"setenv fdt_file imx6dl-swordtail.dtb; fi; " \
+				"if test $board_name = SWORDTAIL && test $board_rev = MX6Q; then " \
+					"setenv fdt_file imx6q-swordtail.dtb; fi; " \
 				"if test $fdt_file = undefined; then " \
 					"echo WARNING: Could not determine dtb to use; fi; " \
 			"fi;\0" \

@@ -6,8 +6,8 @@
  * SPDX-License-Identifier:	GPL-2.0+
  */
 
-#ifndef __MX6ZEBRA_CONFIG_H
-#define __MX6ZEBRA_CONFIG_H
+#ifndef __MX6SWORDTAIL_CONFIG_H
+#define __MX6SWORDTAIL_CONFIG_H
 
 #ifdef CONFIG_SPL
 #include "imx6_spl.h"
@@ -31,7 +31,7 @@
 #elif defined(CONFIG_MX6SOLO)
 #define PHYS_SDRAM_SIZE		(1u * 512 * 1024 * 1024)
 #endif
-#include "mx6zebra_common.h"
+#include "mx6swordtail_common.h"
 
 #define CONFIG_SYS_FSL_USDHC_NUM	2
 #ifndef CONFIG_SYS_MMC_ENV_PART
@@ -89,5 +89,5 @@
 	#define CONFIG_WAVEFORM_BUF_SIZE		0x200000
 #endif /* CONFIG_SPLASH_SCREEN && CONFIG_MXC_EPDC */
 
-#endif                         /* __MX6ZEBRA_CONFIG_H */
+#endif                         /* __MX6SWORDTAIL_CONFIG_H */
 

@@ -1,13 +1,13 @@
-if TARGET_MX6ZEBRA || TARGET_MX6ZEBRA_COMMON
+if TARGET_MX6SWORDTAIL || TARGET_MX6SWORDTAIL_COMMON
 
 config SYS_BOARD
-	default "mx6zebra"
+	default "mx6swordtail"
 
 config SYS_VENDOR
 	default "versalogic"
 
 config SYS_CONFIG_NAME
-	default "mx6zebra"
+	default "mx6swordtail"
 
 config SYS_TEXT_BASE
     default 0x17800000
